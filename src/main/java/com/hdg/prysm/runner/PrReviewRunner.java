@@ -7,6 +7,7 @@ import com.hdg.prysm.context.PrContext;
 import com.hdg.prysm.context.PrContextResolver;
 import com.hdg.prysm.diff.PrDiff;
 import com.hdg.prysm.diff.PrDiffProvider;
+import com.hdg.prysm.enrichment.ReviewContextEnrichmentService;
 import com.hdg.prysm.execution.ReviewExecutionInput;
 import com.hdg.prysm.review.PrReviewContext;
 import com.hdg.prysm.review.PrReviewContextLoader;
@@ -36,6 +37,7 @@ public class PrReviewRunner implements ApplicationRunner {
     private final ReviewFileSelectionService reviewFileSelectionService;
     private final ReviewContextBudgetService reviewContextBudgetService;
     private final ReviewExecutionInputAssembler reviewExecutionInputAssembler;
+    private final ReviewContextEnrichmentService reviewContextEnrichmentService;
     private final Environment environment;
     private final boolean runnerEnabled;
 
@@ -49,6 +51,7 @@ public class PrReviewRunner implements ApplicationRunner {
             ReviewFileSelectionService reviewFileSelectionService,
             ReviewContextBudgetService reviewContextBudgetService,
             ReviewExecutionInputAssembler reviewExecutionInputAssembler,
+            ReviewContextEnrichmentService reviewContextEnrichmentService,
             Environment environment,
             @Value("${prysm.runner.enabled:true}") boolean runnerEnabled
     ) {
@@ -58,6 +61,7 @@ public class PrReviewRunner implements ApplicationRunner {
         this.reviewFileSelectionService = reviewFileSelectionService;
         this.reviewContextBudgetService = reviewContextBudgetService;
         this.reviewExecutionInputAssembler = reviewExecutionInputAssembler;
+        this.reviewContextEnrichmentService = reviewContextEnrichmentService;
         this.environment = environment;
         this.runnerEnabled = runnerEnabled;
     }
@@ -122,6 +126,14 @@ public class PrReviewRunner implements ApplicationRunner {
                 executionInput.getFiles().size(),
                 executionInput.getContextStatus().getCode(),
                 executionInput.getPromptPayload().getUserPrompt().length()
+        );
+
+        ReviewExecutionInput enrichedInput = reviewContextEnrichmentService.enrich(executionInput);
+        log.info(
+                "Enriched review execution input: files={}, contextStatus={}, promptCharacters={}",
+                enrichedInput.getFiles().size(),
+                enrichedInput.getContextStatus().getCode(),
+                enrichedInput.getPromptPayload().getUserPrompt().length()
         );
     }
 }

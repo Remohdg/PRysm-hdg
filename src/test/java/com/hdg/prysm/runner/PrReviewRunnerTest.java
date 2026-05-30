@@ -9,6 +9,7 @@ import com.hdg.prysm.diff.PrChangedFile;
 import com.hdg.prysm.diff.PrChangedFileStatus;
 import com.hdg.prysm.diff.PrDiff;
 import com.hdg.prysm.diff.PrDiffProvider;
+import com.hdg.prysm.enrichment.ReviewContextEnrichmentService;
 import com.hdg.prysm.execution.ContextStatus;
 import com.hdg.prysm.execution.ContextStatusCode;
 import com.hdg.prysm.execution.PromptPayload;
@@ -41,6 +42,7 @@ class PrReviewRunnerTest {
         ReviewFileSelectionService selectionService = mock(ReviewFileSelectionService.class);
         ReviewContextBudgetService budgetService = mock(ReviewContextBudgetService.class);
         ReviewExecutionInputAssembler inputAssembler = mock(ReviewExecutionInputAssembler.class);
+        ReviewContextEnrichmentService enrichmentService = mock(ReviewContextEnrichmentService.class);
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("GITHUB_ACTIONS", "true");
         PrReviewRunner runner = new PrReviewRunner(
@@ -50,6 +52,7 @@ class PrReviewRunnerTest {
                 selectionService,
                 budgetService,
                 inputAssembler,
+                enrichmentService,
                 environment,
                 false
         );
@@ -62,6 +65,7 @@ class PrReviewRunnerTest {
         verify(selectionService, never()).select(org.mockito.ArgumentMatchers.any());
         verify(budgetService, never()).allocate(org.mockito.ArgumentMatchers.any());
         verify(inputAssembler, never()).assemble(org.mockito.ArgumentMatchers.any());
+        verify(enrichmentService, never()).enrich(org.mockito.ArgumentMatchers.any());
     }
 
     /**
@@ -75,6 +79,7 @@ class PrReviewRunnerTest {
         ReviewFileSelectionService selectionService = mock(ReviewFileSelectionService.class);
         ReviewContextBudgetService budgetService = mock(ReviewContextBudgetService.class);
         ReviewExecutionInputAssembler inputAssembler = mock(ReviewExecutionInputAssembler.class);
+        ReviewContextEnrichmentService enrichmentService = mock(ReviewContextEnrichmentService.class);
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("GITHUB_ACTIONS", "false");
         PrReviewRunner runner = new PrReviewRunner(
@@ -84,6 +89,7 @@ class PrReviewRunnerTest {
                 selectionService,
                 budgetService,
                 inputAssembler,
+                enrichmentService,
                 environment,
                 true
         );
@@ -96,19 +102,21 @@ class PrReviewRunnerTest {
         verify(selectionService, never()).select(org.mockito.ArgumentMatchers.any());
         verify(budgetService, never()).allocate(org.mockito.ArgumentMatchers.any());
         verify(inputAssembler, never()).assemble(org.mockito.ArgumentMatchers.any());
+        verify(enrichmentService, never()).enrich(org.mockito.ArgumentMatchers.any());
     }
 
     /**
-     * GitHub Actions 环境中启用 Runner 时，应串起 PR5、PR6、PR7 和 PR8。
+     * GitHub Actions 环境中启用 Runner 时，应串起上下文加载、预算、输入组装和扩展上下文门禁。
      */
     @Test
-    void shouldRunReviewContextSelectionBudgetAndInputAssemblyWhenRunningInGithubActions() {
+    void shouldRunReviewContextSelectionBudgetInputAssemblyAndEnrichmentWhenRunningInGithubActions() {
         PrContextResolver resolver = mock(PrContextResolver.class);
         PrDiffProvider diffProvider = mock(PrDiffProvider.class);
         PrReviewContextLoader reviewContextLoader = mock(PrReviewContextLoader.class);
         ReviewFileSelectionService selectionService = mock(ReviewFileSelectionService.class);
         ReviewContextBudgetService budgetService = mock(ReviewContextBudgetService.class);
         ReviewExecutionInputAssembler inputAssembler = mock(ReviewExecutionInputAssembler.class);
+        ReviewContextEnrichmentService enrichmentService = mock(ReviewContextEnrichmentService.class);
         PrContext context = new PrContext("chinensdkcsdck", "PRysm", 3);
         PrDiff diff = new PrDiff(
                 context,
@@ -130,6 +138,7 @@ class PrReviewRunnerTest {
         when(selectionService.select(reviewContext)).thenReturn(selectionResult);
         when(budgetService.allocate(selectionResult)).thenReturn(budgetResult);
         when(inputAssembler.assemble(budgetResult)).thenReturn(executionInput);
+        when(enrichmentService.enrich(executionInput)).thenReturn(executionInput);
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("GITHUB_ACTIONS", "true");
         PrReviewRunner runner = new PrReviewRunner(
@@ -139,6 +148,7 @@ class PrReviewRunnerTest {
                 selectionService,
                 budgetService,
                 inputAssembler,
+                enrichmentService,
                 environment,
                 true
         );
@@ -151,5 +161,6 @@ class PrReviewRunnerTest {
         verify(selectionService).select(reviewContext);
         verify(budgetService).allocate(selectionResult);
         verify(inputAssembler).assemble(budgetResult);
+        verify(enrichmentService).enrich(executionInput);
     }
 }
