@@ -19,6 +19,8 @@ import com.hdg.prysm.execution.ReviewExecutionInput;
 import com.hdg.prysm.execution.RuleEngineResult;
 import com.hdg.prysm.github.GithubPullRequestCommentClient;
 import com.hdg.prysm.llm.LlmReviewRunner;
+import com.hdg.prysm.optimization.LlmOptimizationContext;
+import com.hdg.prysm.optimization.LlmOptimizationPlanner;
 import com.hdg.prysm.optimization.LlmOptimizationProperties;
 import com.hdg.prysm.review.PrReviewContext;
 import com.hdg.prysm.review.PrReviewContextLoader;
@@ -79,6 +81,8 @@ class PrReviewRunnerTest {
                 commentRenderer,
                 commentClient,
                 baselineOptimizationProperties(),
+                baselineOptimizationPlanner(),
+                new LlmOptimizationContext(),
                 traceRecorder,
                 traceReporter,
                 environment,
@@ -140,6 +144,8 @@ class PrReviewRunnerTest {
                 commentRenderer,
                 commentClient,
                 baselineOptimizationProperties(),
+                baselineOptimizationPlanner(),
+                new LlmOptimizationContext(),
                 traceRecorder,
                 traceReporter,
                 environment,
@@ -244,6 +250,8 @@ class PrReviewRunnerTest {
                 commentRenderer,
                 commentClient,
                 baselineOptimizationProperties(),
+                baselineOptimizationPlanner(),
+                new LlmOptimizationContext(),
                 traceRecorder,
                 traceReporter,
                 environment,
@@ -344,6 +352,8 @@ class PrReviewRunnerTest {
                 commentRenderer,
                 commentClient,
                 baselineOptimizationProperties(),
+                baselineOptimizationPlanner(),
+                new LlmOptimizationContext(),
                 traceRecorder,
                 traceReporter,
                 environment,
@@ -399,6 +409,8 @@ class PrReviewRunnerTest {
                 commentRenderer,
                 commentClient,
                 baselineOptimizationProperties(),
+                baselineOptimizationPlanner(),
+                new LlmOptimizationContext(),
                 traceRecorder,
                 traceReporter,
                 environment,
@@ -426,5 +438,9 @@ class PrReviewRunnerTest {
                 "qwen-turbo",
                 false
         );
+    }
+
+    private static LlmOptimizationPlanner baselineOptimizationPlanner() {
+        return new LlmOptimizationPlanner(baselineOptimizationProperties(), "test-model");
     }
 }
