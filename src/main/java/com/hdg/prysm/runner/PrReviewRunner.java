@@ -161,14 +161,14 @@ public class PrReviewRunner implements ApplicationRunner {
                 enrichedInput.getContextStatus().getCode(),
                 enrichedInput.getPromptPayload().getUserPrompt().length()
         );
-        RuleEngineResult ruleResult = ruleEngineRunner.run(executionInput);
+        RuleEngineResult ruleResult = ruleEngineRunner.run(enrichedInput);
         log.info(
                 "Rule engine completed: findings={}, summary={}",
                 ruleResult.getFindings().size(),
                 ruleResult.getSummary()
         );
 
-        LlmReviewResult llmResult = llmReviewRunner.run(executionInput);
+        LlmReviewResult llmResult = llmReviewRunner.run(enrichedInput);
         log.info(
                 "LLM review completed: findings={}, summary={}",
                 llmResult.getFindings().size(),
@@ -176,7 +176,7 @@ public class PrReviewRunner implements ApplicationRunner {
         );
 
         ReviewAggregationResult aggregationResult = reviewResultAggregator.aggregate(
-                executionInput,
+                enrichedInput,
                 ruleResult,
                 llmResult
         );
@@ -192,7 +192,7 @@ public class PrReviewRunner implements ApplicationRunner {
             return;
         }
 
-        githubPullRequestCommentClient.createComment(executionInput.getPrContext(), commentBody);
+        githubPullRequestCommentClient.createComment(enrichedInput.getPrContext(), commentBody);
         log.info("Wrote aggregated review comment to pull request.");
     }
 }
