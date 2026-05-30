@@ -9,6 +9,7 @@ import com.hdg.prysm.diff.PrChangedFile;
 import com.hdg.prysm.diff.PrChangedFileStatus;
 import com.hdg.prysm.diff.PrDiff;
 import com.hdg.prysm.diff.PrDiffProvider;
+import com.hdg.prysm.enrichment.ReviewContextEnrichmentService;
 import com.hdg.prysm.comment.ReviewCommentRenderer;
 import com.hdg.prysm.execution.ContextStatus;
 import com.hdg.prysm.execution.ContextStatusCode;
@@ -49,6 +50,7 @@ class PrReviewRunnerTest {
         ReviewFileSelectionService selectionService = mock(ReviewFileSelectionService.class);
         ReviewContextBudgetService budgetService = mock(ReviewContextBudgetService.class);
         ReviewExecutionInputAssembler inputAssembler = mock(ReviewExecutionInputAssembler.class);
+        ReviewContextEnrichmentService enrichmentService = mock(ReviewContextEnrichmentService.class);
         RuleEngineRunner ruleEngineRunner = mock(RuleEngineRunner.class);
         LlmReviewRunner llmReviewRunner = mock(LlmReviewRunner.class);
         ReviewResultAggregator aggregator = mock(ReviewResultAggregator.class);
@@ -63,6 +65,7 @@ class PrReviewRunnerTest {
                 selectionService,
                 budgetService,
                 inputAssembler,
+                enrichmentService,
                 ruleEngineRunner,
                 llmReviewRunner,
                 aggregator,
@@ -81,6 +84,7 @@ class PrReviewRunnerTest {
         verify(selectionService, never()).select(org.mockito.ArgumentMatchers.any());
         verify(budgetService, never()).allocate(org.mockito.ArgumentMatchers.any());
         verify(inputAssembler, never()).assemble(org.mockito.ArgumentMatchers.any());
+        verify(enrichmentService, never()).enrich(org.mockito.ArgumentMatchers.any());
         verify(ruleEngineRunner, never()).run(org.mockito.ArgumentMatchers.any());
         verify(llmReviewRunner, never()).run(org.mockito.ArgumentMatchers.any());
         verify(aggregator, never()).aggregate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
@@ -99,6 +103,7 @@ class PrReviewRunnerTest {
         ReviewFileSelectionService selectionService = mock(ReviewFileSelectionService.class);
         ReviewContextBudgetService budgetService = mock(ReviewContextBudgetService.class);
         ReviewExecutionInputAssembler inputAssembler = mock(ReviewExecutionInputAssembler.class);
+        ReviewContextEnrichmentService enrichmentService = mock(ReviewContextEnrichmentService.class);
         RuleEngineRunner ruleEngineRunner = mock(RuleEngineRunner.class);
         LlmReviewRunner llmReviewRunner = mock(LlmReviewRunner.class);
         ReviewResultAggregator aggregator = mock(ReviewResultAggregator.class);
@@ -113,6 +118,7 @@ class PrReviewRunnerTest {
                 selectionService,
                 budgetService,
                 inputAssembler,
+                enrichmentService,
                 ruleEngineRunner,
                 llmReviewRunner,
                 aggregator,
@@ -131,6 +137,7 @@ class PrReviewRunnerTest {
         verify(selectionService, never()).select(org.mockito.ArgumentMatchers.any());
         verify(budgetService, never()).allocate(org.mockito.ArgumentMatchers.any());
         verify(inputAssembler, never()).assemble(org.mockito.ArgumentMatchers.any());
+        verify(enrichmentService, never()).enrich(org.mockito.ArgumentMatchers.any());
         verify(ruleEngineRunner, never()).run(org.mockito.ArgumentMatchers.any());
         verify(llmReviewRunner, never()).run(org.mockito.ArgumentMatchers.any());
         verify(aggregator, never()).aggregate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
@@ -139,16 +146,17 @@ class PrReviewRunnerTest {
     }
 
     /**
-     * GitHub Actions 环境中启用 Runner 时，应串起 PR5、PR6、PR7 和 PR8。
+     * GitHub Actions 环境中启用 Runner 时，应串起上下文加载、预算、输入组装和扩展上下文门禁。
      */
     @Test
-    void shouldRunReviewContextSelectionBudgetAndInputAssemblyWhenRunningInGithubActions() {
+    void shouldRunReviewContextSelectionBudgetInputAssemblyAndEnrichmentWhenRunningInGithubActions() {
         PrContextResolver resolver = mock(PrContextResolver.class);
         PrDiffProvider diffProvider = mock(PrDiffProvider.class);
         PrReviewContextLoader reviewContextLoader = mock(PrReviewContextLoader.class);
         ReviewFileSelectionService selectionService = mock(ReviewFileSelectionService.class);
         ReviewContextBudgetService budgetService = mock(ReviewContextBudgetService.class);
         ReviewExecutionInputAssembler inputAssembler = mock(ReviewExecutionInputAssembler.class);
+        ReviewContextEnrichmentService enrichmentService = mock(ReviewContextEnrichmentService.class);
         RuleEngineRunner ruleEngineRunner = mock(RuleEngineRunner.class);
         LlmReviewRunner llmReviewRunner = mock(LlmReviewRunner.class);
         ReviewResultAggregator aggregator = mock(ReviewResultAggregator.class);
@@ -185,6 +193,7 @@ class PrReviewRunnerTest {
         when(selectionService.select(reviewContext)).thenReturn(selectionResult);
         when(budgetService.allocate(selectionResult)).thenReturn(budgetResult);
         when(inputAssembler.assemble(budgetResult)).thenReturn(executionInput);
+        when(enrichmentService.enrich(executionInput)).thenReturn(executionInput);
         when(ruleEngineRunner.run(executionInput)).thenReturn(ruleResult);
         when(llmReviewRunner.run(executionInput)).thenReturn(llmResult);
         when(aggregator.aggregate(executionInput, ruleResult, llmResult)).thenReturn(aggregationResult);
@@ -198,6 +207,7 @@ class PrReviewRunnerTest {
                 selectionService,
                 budgetService,
                 inputAssembler,
+                enrichmentService,
                 ruleEngineRunner,
                 llmReviewRunner,
                 aggregator,
@@ -216,6 +226,7 @@ class PrReviewRunnerTest {
         verify(selectionService).select(reviewContext);
         verify(budgetService).allocate(selectionResult);
         verify(inputAssembler).assemble(budgetResult);
+        verify(enrichmentService).enrich(executionInput);
         verify(ruleEngineRunner).run(executionInput);
         verify(llmReviewRunner).run(executionInput);
         verify(aggregator).aggregate(executionInput, ruleResult, llmResult);

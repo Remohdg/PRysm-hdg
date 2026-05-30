@@ -7,6 +7,7 @@ import com.hdg.prysm.context.PrContext;
 import com.hdg.prysm.context.PrContextResolver;
 import com.hdg.prysm.diff.PrDiff;
 import com.hdg.prysm.diff.PrDiffProvider;
+import com.hdg.prysm.enrichment.ReviewContextEnrichmentService;
 import com.hdg.prysm.comment.ReviewCommentRenderer;
 import com.hdg.prysm.execution.LlmReviewResult;
 import com.hdg.prysm.execution.ReviewExecutionInput;
@@ -44,6 +45,7 @@ public class PrReviewRunner implements ApplicationRunner {
     private final ReviewFileSelectionService reviewFileSelectionService;
     private final ReviewContextBudgetService reviewContextBudgetService;
     private final ReviewExecutionInputAssembler reviewExecutionInputAssembler;
+    private final ReviewContextEnrichmentService reviewContextEnrichmentService;
     private final RuleEngineRunner ruleEngineRunner;
     private final LlmReviewRunner llmReviewRunner;
     private final ReviewResultAggregator reviewResultAggregator;
@@ -63,6 +65,7 @@ public class PrReviewRunner implements ApplicationRunner {
             ReviewFileSelectionService reviewFileSelectionService,
             ReviewContextBudgetService reviewContextBudgetService,
             ReviewExecutionInputAssembler reviewExecutionInputAssembler,
+            ReviewContextEnrichmentService reviewContextEnrichmentService,
             RuleEngineRunner ruleEngineRunner,
             LlmReviewRunner llmReviewRunner,
             ReviewResultAggregator reviewResultAggregator,
@@ -78,6 +81,7 @@ public class PrReviewRunner implements ApplicationRunner {
         this.reviewFileSelectionService = reviewFileSelectionService;
         this.reviewContextBudgetService = reviewContextBudgetService;
         this.reviewExecutionInputAssembler = reviewExecutionInputAssembler;
+        this.reviewContextEnrichmentService = reviewContextEnrichmentService;
         this.ruleEngineRunner = ruleEngineRunner;
         this.llmReviewRunner = llmReviewRunner;
         this.reviewResultAggregator = reviewResultAggregator;
@@ -150,6 +154,13 @@ public class PrReviewRunner implements ApplicationRunner {
                 executionInput.getPromptPayload().getUserPrompt().length()
         );
 
+        ReviewExecutionInput enrichedInput = reviewContextEnrichmentService.enrich(executionInput);
+        log.info(
+                "Enriched review execution input: files={}, contextStatus={}, promptCharacters={}",
+                enrichedInput.getFiles().size(),
+                enrichedInput.getContextStatus().getCode(),
+                enrichedInput.getPromptPayload().getUserPrompt().length()
+        );
         RuleEngineResult ruleResult = ruleEngineRunner.run(executionInput);
         log.info(
                 "Rule engine completed: findings={}, summary={}",
