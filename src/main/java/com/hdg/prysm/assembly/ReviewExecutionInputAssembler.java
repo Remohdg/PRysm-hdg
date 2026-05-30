@@ -25,29 +25,29 @@ import java.util.StringJoiner;
 public class ReviewExecutionInputAssembler {
 
     private static final String SYSTEM_PROMPT = """
-            You are Prysm, an automated pull request code reviewer.
-            Review only the provided patch, snippets, and metadata.
-            Do not invent files, line numbers, APIs, dependencies, or runtime behavior that are not present in the input.
-            Focus on correctness, security, maintainability, reliability, and test impact.
-            Return only JSON that follows the output schema.
+            你是 Prysm，一个自动化 Pull Request 代码审查助手。
+            你只能基于输入中提供的 patch、代码片段和元数据进行审查。
+            不要编造输入中不存在的文件、行号、API、依赖或运行时行为。
+            优先关注正确性、安全性、可维护性、可靠性和测试影响。
+            只返回符合输出 schema 的 JSON，不要输出 Markdown 或额外解释。
             """;
 
     private static final String OUTPUT_SCHEMA = """
             {
-              "summary": "Short review summary.",
+              "summary": "本次审查的简短总结。",
               "findings": [
                 {
                   "source": "llm",
                   "severity": "error|warning|info",
-                  "filePath": "path/to/file",
+                  "filePath": "问题所在文件路径",
                   "startLine": 1,
                   "endLine": 1,
                   "side": "RIGHT",
                   "line": 1,
                   "startSide": "RIGHT",
-                  "title": "Issue title",
-                  "message": "Why this is a problem.",
-                  "suggestion": "Concrete fix direction.",
+                  "title": "问题标题",
+                  "message": "说明为什么这是问题。",
+                  "suggestion": "给出具体修改方向。",
                   "ruleId": "LLM_RULE_ID"
                 }
               ]
@@ -79,12 +79,12 @@ public class ReviewExecutionInputAssembler {
      */
     private ContextStatus contextStatus(ReviewContextBudgetResult budgetResult) {
         if (budgetResult.getSelectedFiles().isEmpty()) {
-            return new ContextStatus(ContextStatusCode.SKIPPED, "no files selected for review input");
+            return new ContextStatus(ContextStatusCode.SKIPPED, "没有文件进入 Review 执行输入");
         }
         if (budgetResult.isTruncated()) {
-            return new ContextStatus(ContextStatusCode.LIMITED, "review input was truncated by context budget");
+            return new ContextStatus(ContextStatusCode.LIMITED, "Review 执行输入已被上下文预算裁剪");
         }
-        return new ContextStatus(ContextStatusCode.FULL, "review input assembled");
+        return new ContextStatus(ContextStatusCode.FULL, "Review 执行输入已组装完成");
     }
 
     /**
@@ -108,24 +108,24 @@ public class ReviewExecutionInputAssembler {
      */
     private void appendPullRequestMetadata(StringBuilder prompt, PrDiff diff) {
         PrContext context = diff.getContext();
-        prompt.append("Pull Request\n");
-        prompt.append("- owner: ").append(context.getOwner()).append('\n');
-        prompt.append("- repository: ").append(context.getRepository()).append('\n');
-        prompt.append("- number: ").append(context.getPullRequestNumber()).append('\n');
-        prompt.append("- changedFiles: ").append(diff.getFileCount()).append('\n');
-        prompt.append("- totalAdditions: ").append(diff.getTotalAdditions()).append('\n');
-        prompt.append("- totalDeletions: ").append(diff.getTotalDeletions()).append("\n\n");
+        prompt.append("Pull Request 基础信息\n");
+        prompt.append("- 所有者: ").append(context.getOwner()).append('\n');
+        prompt.append("- 仓库: ").append(context.getRepository()).append('\n');
+        prompt.append("- PR 编号: ").append(context.getPullRequestNumber()).append('\n');
+        prompt.append("- 变更文件数: ").append(diff.getFileCount()).append('\n');
+        prompt.append("- 新增行数: ").append(diff.getTotalAdditions()).append('\n');
+        prompt.append("- 删除行数: ").append(diff.getTotalDeletions()).append("\n\n");
     }
 
     /**
      * 写入 PR7 预算使用情况。
      */
     private void appendBudgetSummary(StringBuilder prompt, ReviewContextBudgetResult budgetResult) {
-        prompt.append("Context Budget\n");
-        prompt.append("- maxTotalCharacters: ").append(budgetResult.getMaxTotalCharacters()).append('\n');
-        prompt.append("- usedCharacters: ").append(budgetResult.getUsedCharacters()).append('\n');
-        prompt.append("- remainingCharacters: ").append(budgetResult.getRemainingCharacters()).append('\n');
-        prompt.append("- truncated: ").append(budgetResult.isTruncated()).append("\n\n");
+        prompt.append("上下文预算\n");
+        prompt.append("- 最大总字符数: ").append(budgetResult.getMaxTotalCharacters()).append('\n');
+        prompt.append("- 已使用字符数: ").append(budgetResult.getUsedCharacters()).append('\n');
+        prompt.append("- 剩余字符数: ").append(budgetResult.getRemainingCharacters()).append('\n');
+        prompt.append("- 是否裁剪: ").append(budgetResult.isTruncated()).append("\n\n");
     }
 
     /**
@@ -136,9 +136,9 @@ public class ReviewExecutionInputAssembler {
             ReviewContextBudgetResult budgetResult,
             List<ReviewTargetFile> targetFiles
     ) {
-        prompt.append("Review Files\n");
+        prompt.append("待审查文件\n");
         if (targetFiles.isEmpty()) {
-            prompt.append("No files were selected for review after filtering and budget allocation.\n\n");
+            prompt.append("经过过滤和预算分配后，没有文件进入本次 Review 执行输入。\n\n");
             return;
         }
 
@@ -159,18 +159,18 @@ public class ReviewExecutionInputAssembler {
             int fileIndex
     ) {
         PrChangedFile changedFile = targetFile.getChangedFile();
-        prompt.append("File ").append(fileIndex).append('\n');
-        prompt.append("- path: ").append(changedFile.getFilename()).append('\n');
-        prompt.append("- status: ").append(changedFile.getStatus()).append('\n');
-        prompt.append("- additions: ").append(changedFile.getAdditions()).append('\n');
-        prompt.append("- deletions: ").append(changedFile.getDeletions()).append('\n');
-        prompt.append("- priority: ").append(targetFile.getPriority()).append('\n');
-        prompt.append("- selected: ").append(targetFile.isSelected()).append('\n');
-        appendOptionalLine(prompt, "note", targetFile.getNote());
-        prompt.append("- requestedCharacters: ").append(budgetFile.getRequestedCharacters()).append('\n');
-        prompt.append("- allocatedCharacters: ").append(budgetFile.getAllocatedCharacters()).append('\n');
-        prompt.append("- truncated: ").append(budgetFile.isTruncated()).append('\n');
-        appendOptionalLine(prompt, "budgetReason", budgetFile.getReason());
+        prompt.append("文件 ").append(fileIndex).append('\n');
+        prompt.append("- 路径: ").append(changedFile.getFilename()).append('\n');
+        prompt.append("- 状态: ").append(changedFile.getStatus()).append('\n');
+        prompt.append("- 新增行数: ").append(changedFile.getAdditions()).append('\n');
+        prompt.append("- 删除行数: ").append(changedFile.getDeletions()).append('\n');
+        prompt.append("- 优先级: ").append(targetFile.getPriority()).append('\n');
+        prompt.append("- 是否选中: ").append(targetFile.isSelected()).append('\n');
+        appendOptionalLine(prompt, "说明", targetFile.getNote());
+        prompt.append("- 原始所需字符数: ").append(budgetFile.getRequestedCharacters()).append('\n');
+        prompt.append("- 实际分配字符数: ").append(budgetFile.getAllocatedCharacters()).append('\n');
+        prompt.append("- 是否被裁剪: ").append(budgetFile.isTruncated()).append('\n');
+        appendOptionalLine(prompt, "预算原因", budgetFile.getReason());
         appendPatch(prompt, changedFile.getPatch());
         appendSnippets(prompt, targetFile.getSnippets());
         prompt.append('\n');
@@ -189,8 +189,8 @@ public class ReviewExecutionInputAssembler {
      * 写入预算后的 patch 文本。
      */
     private void appendPatch(StringBuilder prompt, String patch) {
-        prompt.append("Patch\n");
-        prompt.append(fencedBlock("diff", patch == null || patch.isBlank() ? "(patch unavailable)" : patch));
+        prompt.append("Patch 内容\n");
+        prompt.append(fencedBlock("diff", patch == null || patch.isBlank() ? "patch 不可用" : patch));
         prompt.append('\n');
     }
 
@@ -198,16 +198,16 @@ public class ReviewExecutionInputAssembler {
      * 写入预算后的 snippet 文本。
      */
     private void appendSnippets(StringBuilder prompt, List<PrReviewFileContext.Snippet> snippets) {
-        prompt.append("Snippets\n");
+        prompt.append("邻近代码片段\n");
         if (snippets.isEmpty()) {
-            prompt.append("(no snippets)\n");
+            prompt.append("没有邻近代码片段\n");
             return;
         }
 
         for (int index = 0; index < snippets.size(); index++) {
             PrReviewFileContext.Snippet snippet = snippets.get(index);
-            prompt.append("Snippet ").append(index + 1)
-                    .append(" lines ")
+            prompt.append("片段 ").append(index + 1)
+                    .append(" 行号 ")
                     .append(snippet.getStartLine())
                     .append('-')
                     .append(snippet.getEndLine())
@@ -226,7 +226,7 @@ public class ReviewExecutionInputAssembler {
             return;
         }
 
-        prompt.append("Skipped Files\n");
+        prompt.append("未进入 Review 的文件\n");
         StringJoiner skippedFileLines = new StringJoiner("\n");
         for (ReviewContextBudgetFile skippedFile : skippedFiles) {
             PrChangedFile changedFile = skippedFile.getTargetFile().getChangedFile();
@@ -247,7 +247,7 @@ public class ReviewExecutionInputAssembler {
      */
     private String safeFenceContent(String content) {
         if (content == null || content.isBlank()) {
-            return "(empty)";
+            return "空内容";
         }
         return content.replace("```", "'''");
     }

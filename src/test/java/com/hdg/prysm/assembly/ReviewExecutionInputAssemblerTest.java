@@ -43,9 +43,11 @@ class ReviewExecutionInputAssemblerTest {
         assertEquals(ContextStatusCode.FULL, input.getContextStatus().getCode());
         assertEquals(1, input.getFiles().size());
         assertEquals("src/main/java/App.java", input.getFiles().get(0).getChangedFile().getFilename());
-        assertTrue(input.getPromptPayload().getSystemPrompt().contains("automated pull request code reviewer"));
+        assertTrue(input.getPromptPayload().getSystemPrompt().contains("自动化 Pull Request 代码审查助手"));
+        assertTrue(input.getPromptPayload().getSystemPrompt().contains("不要编造"));
         assertTrue(input.getPromptPayload().getOutputSchema().contains("\"findings\""));
         assertTrue(input.getPromptPayload().getOutputSchema().contains("\"ruleId\""));
+        assertTrue(input.getPromptPayload().getOutputSchema().contains("问题标题"));
     }
 
     /**
@@ -63,16 +65,16 @@ class ReviewExecutionInputAssemblerTest {
 
         String userPrompt = assembler.assemble(budgetResult).getPromptPayload().getUserPrompt();
 
-        assertTrue(userPrompt.contains("Pull Request"));
-        assertTrue(userPrompt.contains("- owner: owner"));
-        assertTrue(userPrompt.contains("- repository: repo"));
-        assertTrue(userPrompt.contains("- number: 8"));
-        assertTrue(userPrompt.contains("Context Budget"));
-        assertTrue(userPrompt.contains("Review Files"));
-        assertTrue(userPrompt.contains("- path: src/main/java/App.java"));
+        assertTrue(userPrompt.contains("Pull Request 基础信息"));
+        assertTrue(userPrompt.contains("- 所有者: owner"));
+        assertTrue(userPrompt.contains("- 仓库: repo"));
+        assertTrue(userPrompt.contains("- PR 编号: 8"));
+        assertTrue(userPrompt.contains("上下文预算"));
+        assertTrue(userPrompt.contains("待审查文件"));
+        assertTrue(userPrompt.contains("- 路径: src/main/java/App.java"));
         assertTrue(userPrompt.contains("```diff"));
         assertTrue(userPrompt.contains("+class App {}"));
-        assertTrue(userPrompt.contains("Snippet 1 lines 1-2"));
+        assertTrue(userPrompt.contains("片段 1 行号 1-2"));
         assertTrue(userPrompt.contains("class App {"));
     }
 
@@ -92,7 +94,8 @@ class ReviewExecutionInputAssemblerTest {
         ReviewExecutionInput input = assembler.assemble(budgetResult);
 
         assertEquals(ContextStatusCode.LIMITED, input.getContextStatus().getCode());
-        assertTrue(input.getPromptPayload().getUserPrompt().contains("- budgetReason: context truncated by budget"));
+        assertTrue(input.getContextStatus().getReason().contains("上下文预算裁剪"));
+        assertTrue(input.getPromptPayload().getUserPrompt().contains("- 预算原因: context truncated by budget"));
     }
 
     /**
@@ -109,8 +112,9 @@ class ReviewExecutionInputAssemblerTest {
 
         assertEquals(ContextStatusCode.SKIPPED, input.getContextStatus().getCode());
         assertTrue(input.getFiles().isEmpty());
-        assertTrue(input.getPromptPayload().getUserPrompt().contains("No files were selected"));
-        assertTrue(input.getPromptPayload().getUserPrompt().contains("Skipped Files"));
+        assertTrue(input.getContextStatus().getReason().contains("没有文件进入"));
+        assertTrue(input.getPromptPayload().getUserPrompt().contains("没有文件进入本次 Review 执行输入"));
+        assertTrue(input.getPromptPayload().getUserPrompt().contains("未进入 Review 的文件"));
         assertTrue(input.getPromptPayload().getUserPrompt().contains("context budget exhausted"));
     }
 
