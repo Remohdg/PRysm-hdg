@@ -177,6 +177,13 @@ class PrReviewRunnerTest {
                 new ContextStatus(ContextStatusCode.SKIPPED, "no files selected"),
                 new PromptPayload("system", "user", "{}")
         );
+        ReviewExecutionInput enrichedInput = new ReviewExecutionInput(
+                context,
+                diff,
+                List.of(),
+                new ContextStatus(ContextStatusCode.LIMITED, "metadata unavailable"),
+                new PromptPayload("system", "enriched user", "{}")
+        );
         RuleEngineResult ruleResult = new RuleEngineResult(List.of(), "no rule findings");
         LlmReviewResult llmResult = new LlmReviewResult(List.of(), "no llm findings", null);
         ReviewAggregationResult aggregationResult = new ReviewAggregationResult(
@@ -193,10 +200,10 @@ class PrReviewRunnerTest {
         when(selectionService.select(reviewContext)).thenReturn(selectionResult);
         when(budgetService.allocate(selectionResult)).thenReturn(budgetResult);
         when(inputAssembler.assemble(budgetResult)).thenReturn(executionInput);
-        when(enrichmentService.enrich(executionInput)).thenReturn(executionInput);
-        when(ruleEngineRunner.run(executionInput)).thenReturn(ruleResult);
-        when(llmReviewRunner.run(executionInput)).thenReturn(llmResult);
-        when(aggregator.aggregate(executionInput, ruleResult, llmResult)).thenReturn(aggregationResult);
+        when(enrichmentService.enrich(executionInput)).thenReturn(enrichedInput);
+        when(ruleEngineRunner.run(enrichedInput)).thenReturn(ruleResult);
+        when(llmReviewRunner.run(enrichedInput)).thenReturn(llmResult);
+        when(aggregator.aggregate(enrichedInput, ruleResult, llmResult)).thenReturn(aggregationResult);
         when(commentRenderer.render(aggregationResult)).thenReturn("review comment");
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("GITHUB_ACTIONS", "true");
@@ -227,9 +234,9 @@ class PrReviewRunnerTest {
         verify(budgetService).allocate(selectionResult);
         verify(inputAssembler).assemble(budgetResult);
         verify(enrichmentService).enrich(executionInput);
-        verify(ruleEngineRunner).run(executionInput);
-        verify(llmReviewRunner).run(executionInput);
-        verify(aggregator).aggregate(executionInput, ruleResult, llmResult);
+        verify(ruleEngineRunner).run(enrichedInput);
+        verify(llmReviewRunner).run(enrichedInput);
+        verify(aggregator).aggregate(enrichedInput, ruleResult, llmResult);
         verify(commentRenderer).render(aggregationResult);
         verify(commentClient).createComment(context, "review comment");
     }
@@ -245,6 +252,7 @@ class PrReviewRunnerTest {
         ReviewFileSelectionService selectionService = mock(ReviewFileSelectionService.class);
         ReviewContextBudgetService budgetService = mock(ReviewContextBudgetService.class);
         ReviewExecutionInputAssembler inputAssembler = mock(ReviewExecutionInputAssembler.class);
+        ReviewContextEnrichmentService enrichmentService = mock(ReviewContextEnrichmentService.class);
         RuleEngineRunner ruleEngineRunner = mock(RuleEngineRunner.class);
         LlmReviewRunner llmReviewRunner = mock(LlmReviewRunner.class);
         ReviewResultAggregator aggregator = mock(ReviewResultAggregator.class);
@@ -256,6 +264,13 @@ class PrReviewRunnerTest {
         ReviewFileSelectionResult selectionResult = new ReviewFileSelectionResult(reviewContext, List.of());
         ReviewContextBudgetResult budgetResult = new ReviewContextBudgetResult(selectionResult, List.of(), 32000);
         ReviewExecutionInput executionInput = new ReviewExecutionInput(
+                context,
+                diff,
+                List.of(),
+                new ContextStatus(ContextStatusCode.SKIPPED, "no files selected"),
+                new PromptPayload("system", "user", "{}")
+        );
+        ReviewExecutionInput enrichedInput = new ReviewExecutionInput(
                 context,
                 diff,
                 List.of(),
@@ -278,9 +293,10 @@ class PrReviewRunnerTest {
         when(selectionService.select(reviewContext)).thenReturn(selectionResult);
         when(budgetService.allocate(selectionResult)).thenReturn(budgetResult);
         when(inputAssembler.assemble(budgetResult)).thenReturn(executionInput);
-        when(ruleEngineRunner.run(executionInput)).thenReturn(ruleResult);
-        when(llmReviewRunner.run(executionInput)).thenReturn(llmResult);
-        when(aggregator.aggregate(executionInput, ruleResult, llmResult)).thenReturn(aggregationResult);
+        when(enrichmentService.enrich(executionInput)).thenReturn(enrichedInput);
+        when(ruleEngineRunner.run(enrichedInput)).thenReturn(ruleResult);
+        when(llmReviewRunner.run(enrichedInput)).thenReturn(llmResult);
+        when(aggregator.aggregate(enrichedInput, ruleResult, llmResult)).thenReturn(aggregationResult);
         when(commentRenderer.render(aggregationResult)).thenReturn("review comment");
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("GITHUB_ACTIONS", "true");
@@ -291,6 +307,7 @@ class PrReviewRunnerTest {
                 selectionService,
                 budgetService,
                 inputAssembler,
+                enrichmentService,
                 ruleEngineRunner,
                 llmReviewRunner,
                 aggregator,
@@ -303,7 +320,8 @@ class PrReviewRunnerTest {
 
         runner.run(new DefaultApplicationArguments());
 
-        verify(aggregator).aggregate(executionInput, ruleResult, llmResult);
+        verify(enrichmentService).enrich(executionInput);
+        verify(aggregator).aggregate(enrichedInput, ruleResult, llmResult);
         verify(commentRenderer).render(aggregationResult);
         verify(commentClient, never()).createComment(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }

@@ -30,4 +30,7 @@ jobs:
       - name: Run Prysm
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_API_BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+          LLM_MODEL: qwen-plus
         run: java -jar target/*.jar
