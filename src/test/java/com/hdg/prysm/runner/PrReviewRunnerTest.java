@@ -26,6 +26,9 @@ import com.hdg.prysm.result.ReviewResultAggregator;
 import com.hdg.prysm.rule.RuleEngineRunner;
 import com.hdg.prysm.selection.ReviewFileSelectionResult;
 import com.hdg.prysm.selection.ReviewFileSelectionService;
+import com.hdg.prysm.trace.TraceContext;
+import com.hdg.prysm.trace.TraceRecorder;
+import com.hdg.prysm.trace.TraceReporter;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.mock.env.MockEnvironment;
@@ -34,6 +37,7 @@ import java.util.List;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -56,6 +60,8 @@ class PrReviewRunnerTest {
         ReviewResultAggregator aggregator = mock(ReviewResultAggregator.class);
         ReviewCommentRenderer commentRenderer = mock(ReviewCommentRenderer.class);
         GithubPullRequestCommentClient commentClient = mock(GithubPullRequestCommentClient.class);
+        TraceRecorder traceRecorder = mock(TraceRecorder.class);
+        TraceReporter traceReporter = mock(TraceReporter.class);
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("GITHUB_ACTIONS", "true");
         PrReviewRunner runner = new PrReviewRunner(
@@ -71,9 +77,12 @@ class PrReviewRunnerTest {
                 aggregator,
                 commentRenderer,
                 commentClient,
+                traceRecorder,
+                traceReporter,
                 environment,
                 false,
-                true
+                true,
+                "test-model"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -90,6 +99,8 @@ class PrReviewRunnerTest {
         verify(aggregator, never()).aggregate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(commentRenderer, never()).render(org.mockito.ArgumentMatchers.any());
         verify(commentClient, never()).createComment(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(traceRecorder, never()).createTrace();
+        verify(traceReporter, never()).report(org.mockito.ArgumentMatchers.any());
     }
 
     /**
@@ -109,6 +120,8 @@ class PrReviewRunnerTest {
         ReviewResultAggregator aggregator = mock(ReviewResultAggregator.class);
         ReviewCommentRenderer commentRenderer = mock(ReviewCommentRenderer.class);
         GithubPullRequestCommentClient commentClient = mock(GithubPullRequestCommentClient.class);
+        TraceRecorder traceRecorder = mock(TraceRecorder.class);
+        TraceReporter traceReporter = mock(TraceReporter.class);
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("GITHUB_ACTIONS", "false");
         PrReviewRunner runner = new PrReviewRunner(
@@ -124,9 +137,12 @@ class PrReviewRunnerTest {
                 aggregator,
                 commentRenderer,
                 commentClient,
+                traceRecorder,
+                traceReporter,
                 environment,
                 true,
-                true
+                true,
+                "test-model"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -143,6 +159,8 @@ class PrReviewRunnerTest {
         verify(aggregator, never()).aggregate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(commentRenderer, never()).render(org.mockito.ArgumentMatchers.any());
         verify(commentClient, never()).createComment(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(traceRecorder, never()).createTrace();
+        verify(traceReporter, never()).report(org.mockito.ArgumentMatchers.any());
     }
 
     /**
@@ -162,6 +180,8 @@ class PrReviewRunnerTest {
         ReviewResultAggregator aggregator = mock(ReviewResultAggregator.class);
         ReviewCommentRenderer commentRenderer = mock(ReviewCommentRenderer.class);
         GithubPullRequestCommentClient commentClient = mock(GithubPullRequestCommentClient.class);
+        TraceRecorder traceRecorder = new TraceRecorder();
+        TraceReporter traceReporter = mock(TraceReporter.class);
         PrContext context = new PrContext("chinensdkcsdck", "PRysm", 3);
         PrDiff diff = new PrDiff(
                 context,
@@ -220,9 +240,12 @@ class PrReviewRunnerTest {
                 aggregator,
                 commentRenderer,
                 commentClient,
+                traceRecorder,
+                traceReporter,
                 environment,
                 true,
-                true
+                true,
+                "test-model"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -239,6 +262,7 @@ class PrReviewRunnerTest {
         verify(aggregator).aggregate(enrichedInput, ruleResult, llmResult);
         verify(commentRenderer).render(aggregationResult);
         verify(commentClient).createComment(context, "review comment");
+        verify(traceReporter).report(org.mockito.ArgumentMatchers.any(TraceContext.class));
     }
 
     /**
@@ -258,6 +282,8 @@ class PrReviewRunnerTest {
         ReviewResultAggregator aggregator = mock(ReviewResultAggregator.class);
         ReviewCommentRenderer commentRenderer = mock(ReviewCommentRenderer.class);
         GithubPullRequestCommentClient commentClient = mock(GithubPullRequestCommentClient.class);
+        TraceRecorder traceRecorder = new TraceRecorder();
+        TraceReporter traceReporter = mock(TraceReporter.class);
         PrContext context = new PrContext("chinensdkcsdck", "PRysm", 3);
         PrDiff diff = new PrDiff(context, List.of());
         PrReviewContext reviewContext = new PrReviewContext(diff, List.of());
@@ -313,9 +339,12 @@ class PrReviewRunnerTest {
                 aggregator,
                 commentRenderer,
                 commentClient,
+                traceRecorder,
+                traceReporter,
                 environment,
                 true,
-                false
+                false,
+                "test-model"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -324,5 +353,59 @@ class PrReviewRunnerTest {
         verify(aggregator).aggregate(enrichedInput, ruleResult, llmResult);
         verify(commentRenderer).render(aggregationResult);
         verify(commentClient, never()).createComment(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(traceReporter).report(org.mockito.ArgumentMatchers.any(TraceContext.class));
+    }
+
+    /**
+     * 执行阶段失败时，也应通过 finally 输出 trace summary。
+     */
+    @Test
+    void shouldReportTraceWhenReviewFails() {
+        PrContextResolver resolver = mock(PrContextResolver.class);
+        PrDiffProvider diffProvider = mock(PrDiffProvider.class);
+        PrReviewContextLoader reviewContextLoader = mock(PrReviewContextLoader.class);
+        ReviewFileSelectionService selectionService = mock(ReviewFileSelectionService.class);
+        ReviewContextBudgetService budgetService = mock(ReviewContextBudgetService.class);
+        ReviewExecutionInputAssembler inputAssembler = mock(ReviewExecutionInputAssembler.class);
+        ReviewContextEnrichmentService enrichmentService = mock(ReviewContextEnrichmentService.class);
+        RuleEngineRunner ruleEngineRunner = mock(RuleEngineRunner.class);
+        LlmReviewRunner llmReviewRunner = mock(LlmReviewRunner.class);
+        ReviewResultAggregator aggregator = mock(ReviewResultAggregator.class);
+        ReviewCommentRenderer commentRenderer = mock(ReviewCommentRenderer.class);
+        GithubPullRequestCommentClient commentClient = mock(GithubPullRequestCommentClient.class);
+        TraceRecorder traceRecorder = new TraceRecorder();
+        TraceReporter traceReporter = mock(TraceReporter.class);
+        RuntimeException failure = new IllegalStateException("diff failed");
+        when(resolver.resolve()).thenReturn(new PrContext("chinensdkcsdck", "PRysm", 3));
+        when(diffProvider.fetch(org.mockito.ArgumentMatchers.any())).thenThrow(failure);
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("GITHUB_ACTIONS", "true");
+        PrReviewRunner runner = new PrReviewRunner(
+                resolver,
+                diffProvider,
+                reviewContextLoader,
+                selectionService,
+                budgetService,
+                inputAssembler,
+                enrichmentService,
+                ruleEngineRunner,
+                llmReviewRunner,
+                aggregator,
+                commentRenderer,
+                commentClient,
+                traceRecorder,
+                traceReporter,
+                environment,
+                true,
+                true,
+                "test-model"
+        );
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalStateException.class,
+                () -> runner.run(new DefaultApplicationArguments())
+        );
+
+        verify(traceReporter, times(1)).report(org.mockito.ArgumentMatchers.any(TraceContext.class));
     }
 }

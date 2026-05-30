@@ -33,6 +33,7 @@ build/
 .vscode/
 
 ### Local planning docs ###
+END_TO_END_TRACING_PLAN.md
 src/main/resources/两个人的对接报告.md
 src/main/resources/提交规范.jpg
 src/main/resources/架构.md
