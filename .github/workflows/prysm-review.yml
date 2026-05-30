@@ -26,3 +26,8 @@ jobs:
 
       - name: Build with Maven
         run: ./mvnw -q -DskipTests package
+
+      - name: Run Prysm
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: java -jar target/*.jar

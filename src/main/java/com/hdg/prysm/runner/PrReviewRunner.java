@@ -2,6 +2,8 @@ package com.hdg.prysm.runner;
 
 import com.hdg.prysm.context.PrContext;
 import com.hdg.prysm.context.PrContextResolver;
+import com.hdg.prysm.diff.PrDiff;
+import com.hdg.prysm.diff.PrDiffProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,6 +23,7 @@ public class PrReviewRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(PrReviewRunner.class);
 
     private final PrContextResolver prContextResolver;
+    private final PrDiffProvider prDiffProvider;
     private final Environment environment;
     private final boolean runnerEnabled;
 
@@ -29,10 +32,12 @@ public class PrReviewRunner implements ApplicationRunner {
      */
     public PrReviewRunner(
             PrContextResolver prContextResolver,
+            PrDiffProvider prDiffProvider,
             Environment environment,
             @Value("${prysm.runner.enabled:true}") boolean runnerEnabled
     ) {
         this.prContextResolver = prContextResolver;
+        this.prDiffProvider = prDiffProvider;
         this.environment = environment;
         this.runnerEnabled = runnerEnabled;
     }
@@ -57,6 +62,14 @@ public class PrReviewRunner implements ApplicationRunner {
                 context.getOwner(),
                 context.getRepository(),
                 context.getPullRequestNumber()
+        );
+
+        PrDiff diff = prDiffProvider.fetch(context);
+        log.info(
+                "Fetched pull request diff: files={}, additions={}, deletions={}",
+                diff.getFileCount(),
+                diff.getTotalAdditions(),
+                diff.getTotalDeletions()
         );
     }
 }
