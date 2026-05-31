@@ -271,6 +271,10 @@ public class OpenAiCompatibleLlmReviewClient implements LlmReviewClient {
     }
 
     private String effectiveModel() {
+        String forcedEffectiveModel = optimizationContext.getForcedEffectiveModel();
+        if (forcedEffectiveModel != null && !forcedEffectiveModel.isBlank()) {
+            return forcedEffectiveModel;
+        }
         String effectiveModel = optimizationContext.getCurrentDecision().getEffectiveModel();
         if (effectiveModel == null || effectiveModel.isBlank()) {
             return model;

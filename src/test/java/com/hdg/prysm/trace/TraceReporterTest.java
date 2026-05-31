@@ -38,7 +38,7 @@ class TraceReporterTest {
         span.put("commentWritten", false);
         span.finish(TraceStatus.SKIPPED, Instant.now());
         context.addSpan(span);
-        TraceSpan llm = new TraceSpan("llm_review", Instant.now());
+        TraceSpan llm = new TraceSpan("llm_review_deep", Instant.now());
         llm.put("optimizationGroup", "baseline");
         llm.put("modelName", "qwen-plus");
         llm.put("effectiveModel", "qwen-plus");

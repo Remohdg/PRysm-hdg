@@ -15,12 +15,29 @@ import java.util.Map;
 public class ReviewCommentRenderer {
 
     public String render(ReviewAggregationResult result) {
+        return render(result, "## PRysm Review Result", null);
+    }
+
+    public String renderFastReview(ReviewAggregationResult result) {
+        return render(
+                result,
+                "## PRysm Fast Review Result",
+                "Fast review is complete. A deeper review is still running and this comment will be updated."
+        );
+    }
+
+    private String render(ReviewAggregationResult result, String title, String notice) {
         if (result == null) {
             throw new IllegalArgumentException("Review aggregation result must not be null");
         }
 
         StringBuilder markdown = new StringBuilder();
-        markdown.append("## PRysm Review Result\n\n");
+        markdown.append(title).append("\n\n");
+        if (notice != null && !notice.isBlank()) {
+            markdown.append("> ")
+                    .append(escapeMarkdownText(notice))
+                    .append("\n\n");
+        }
         markdown.append("Found ")
                 .append(result.getFindings().size())
                 .append(" issue(s).");

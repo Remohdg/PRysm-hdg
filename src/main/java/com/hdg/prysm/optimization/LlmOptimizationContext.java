@@ -11,6 +11,7 @@ public class LlmOptimizationContext {
     private LlmOptimizationDecision currentDecision = LlmOptimizationDecision.baseline(null);
     private Integer originalPromptCharacters;
     private Integer compactPromptCharacters;
+    private String forcedEffectiveModel;
 
     public LlmOptimizationDecision getCurrentDecision() {
         return currentDecision;
@@ -21,6 +22,21 @@ public class LlmOptimizationContext {
             throw new IllegalArgumentException("Optimization decision must not be null");
         }
         this.currentDecision = currentDecision;
+    }
+
+    public String getForcedEffectiveModel() {
+        return forcedEffectiveModel;
+    }
+
+    public void forceEffectiveModel(String forcedEffectiveModel) {
+        if (forcedEffectiveModel == null || forcedEffectiveModel.isBlank()) {
+            throw new IllegalArgumentException("Forced effective model must not be blank");
+        }
+        this.forcedEffectiveModel = forcedEffectiveModel.trim();
+    }
+
+    public void clearForcedEffectiveModel() {
+        this.forcedEffectiveModel = null;
     }
 
     public Integer getOriginalPromptCharacters() {

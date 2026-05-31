@@ -12,7 +12,7 @@ class TraceSummaryTest {
     @Test
     void shouldSummarizeSuccessfulTrace() {
         TraceContext context = TraceContext.create("trace-1", Instant.now());
-        TraceSpan llm = new TraceSpan("llm_review", Instant.now());
+        TraceSpan llm = new TraceSpan("llm_review_deep", Instant.now());
         llm.put("promptCharacters", 100);
         llm.put("estimatedPromptTokens", 25);
         llm.put("tokenSource", "estimated");

@@ -88,7 +88,8 @@ class PrReviewRunnerTest {
                 environment,
                 false,
                 true,
-                "test-model"
+                "test-model",
+                "fast-model"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -151,7 +152,8 @@ class PrReviewRunnerTest {
                 environment,
                 true,
                 true,
-                "test-model"
+                "test-model",
+                "fast-model"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -233,7 +235,9 @@ class PrReviewRunnerTest {
         when(ruleEngineRunner.run(enrichedInput)).thenReturn(ruleResult);
         when(llmReviewRunner.run(enrichedInput)).thenReturn(llmResult);
         when(aggregator.aggregate(enrichedInput, ruleResult, llmResult)).thenReturn(aggregationResult);
+        when(commentRenderer.renderFastReview(aggregationResult)).thenReturn("fast review comment");
         when(commentRenderer.render(aggregationResult)).thenReturn("review comment");
+        when(commentClient.createComment(context, "fast review comment")).thenReturn(12345L);
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("GITHUB_ACTIONS", "true");
         PrReviewRunner runner = new PrReviewRunner(
@@ -257,7 +261,8 @@ class PrReviewRunnerTest {
                 environment,
                 true,
                 true,
-                "test-model"
+                "test-model",
+                "fast-model"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -270,10 +275,12 @@ class PrReviewRunnerTest {
         verify(inputAssembler).assemble(budgetResult);
         verify(enrichmentService).enrich(executionInput);
         verify(ruleEngineRunner).run(enrichedInput);
-        verify(llmReviewRunner).run(enrichedInput);
-        verify(aggregator).aggregate(enrichedInput, ruleResult, llmResult);
+        verify(llmReviewRunner, times(2)).run(enrichedInput);
+        verify(aggregator, times(2)).aggregate(enrichedInput, ruleResult, llmResult);
         verify(commentRenderer).render(aggregationResult);
-        verify(commentClient).createComment(context, "review comment");
+        verify(commentRenderer).renderFastReview(aggregationResult);
+        verify(commentClient).createComment(context, "fast review comment");
+        verify(commentClient).updateComment(context, 12345L, "review comment");
         verify(traceReporter).report(org.mockito.ArgumentMatchers.any(TraceContext.class));
     }
 
@@ -335,6 +342,7 @@ class PrReviewRunnerTest {
         when(ruleEngineRunner.run(enrichedInput)).thenReturn(ruleResult);
         when(llmReviewRunner.run(enrichedInput)).thenReturn(llmResult);
         when(aggregator.aggregate(enrichedInput, ruleResult, llmResult)).thenReturn(aggregationResult);
+        when(commentRenderer.renderFastReview(aggregationResult)).thenReturn("fast review comment");
         when(commentRenderer.render(aggregationResult)).thenReturn("review comment");
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("GITHUB_ACTIONS", "true");
@@ -359,13 +367,16 @@ class PrReviewRunnerTest {
                 environment,
                 true,
                 false,
-                "test-model"
+                "test-model",
+                "fast-model"
         );
 
         runner.run(new DefaultApplicationArguments());
 
         verify(enrichmentService).enrich(executionInput);
+        verify(llmReviewRunner).run(enrichedInput);
         verify(aggregator).aggregate(enrichedInput, ruleResult, llmResult);
+        verify(commentRenderer, never()).renderFastReview(aggregationResult);
         verify(commentRenderer).render(aggregationResult);
         verify(commentClient, never()).createComment(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(traceReporter).report(org.mockito.ArgumentMatchers.any(TraceContext.class));
@@ -416,7 +427,8 @@ class PrReviewRunnerTest {
                 environment,
                 true,
                 true,
-                "test-model"
+                "test-model",
+                "fast-model"
         );
 
         org.junit.jupiter.api.Assertions.assertThrows(
