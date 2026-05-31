@@ -74,6 +74,7 @@ public class PrReviewRunner implements ApplicationRunner {
     private final boolean commentEnabled;
     private final String llmModel;
     private final String fastModel;
+    private final ReviewMode reviewMode;
 
     /**
      * 注入 PR 上下文解析器、运行环境和 Runner 开关。
@@ -101,7 +102,8 @@ public class PrReviewRunner implements ApplicationRunner {
             @Value("${prysm.runner.enabled:true}") boolean runnerEnabled,
             @Value("${prysm.comment.enabled:true}") boolean commentEnabled,
             @Value("${prysm.llm.model:unknown}") String llmModel,
-            @Value("${prysm.optimization.fast-path.fast-model:qwen-turbo}") String fastModel
+            @Value("${prysm.optimization.fast-path.fast-model:qwen-turbo}") String fastModel,
+            @Value("${prysm.review.mode:full}") String reviewMode
     ) {
         this.prContextResolver = prContextResolver;
         this.prDiffProvider = prDiffProvider;
@@ -126,6 +128,7 @@ public class PrReviewRunner implements ApplicationRunner {
         this.commentEnabled = commentEnabled;
         this.llmModel = llmModel;
         this.fastModel = fastModel;
+        this.reviewMode = ReviewMode.from(reviewMode);
     }
 
     /**
@@ -286,25 +289,27 @@ public class PrReviewRunner implements ApplicationRunner {
                 ruleResult.getSummary()
         );
 
-        Long fastCommentId = commentEnabled
-                ? writeFastReviewComment(trace, enrichedInput, ruleResult)
-                : null;
+        Long fastCommentId = null;
+        if (reviewMode.runsFastReview()) {
+            fastCommentId = commentEnabled
+                    ? writeFastReviewComment(trace, enrichedInput, ruleResult)
+                    : null;
+            if (!reviewMode.runsDeepReview()) {
+                log.info("Prysm review completed in {} mode.", reviewMode.configValue);
+                return;
+            }
+        }
 
-        LlmOptimizationDecision optimizationDecision = LlmOptimizationDecision.baseline(llmModel);
+        LlmOptimizationDecision optimizationDecision = optimizationPlanner.plan(enrichedInput);
         optimizationContext.setCurrentDecision(optimizationDecision);
         LlmReviewResult rawLlmResult;
-        optimizationContext.forceEffectiveModel(llmModel);
-        try {
-            rawLlmResult = traceRecorder.record(
-                    trace,
-                    "llm_review_deep",
-                    () -> llmReviewRunner.run(enrichedInput),
-                    span -> {
-                    }
-            );
-        } finally {
-            optimizationContext.clearForcedEffectiveModel();
-        }
+        rawLlmResult = traceRecorder.record(
+                trace,
+                "llm_review_deep",
+                () -> llmReviewRunner.run(enrichedInput),
+                span -> {
+                }
+        );
         int rawDeepFindings = rawLlmResult.getFindings().size();
         LlmReviewResult llmResult = reviewFindingQualityGate.filterDeepReview(enrichedInput, rawLlmResult);
         TraceSpan llmSpan = trace.getSpans().getLast();
@@ -322,8 +327,8 @@ public class PrReviewRunner implements ApplicationRunner {
                 .put("fastPathEnabled", optimizationProperties.isFastPathEnabled())
                 .put("fastPathMode", optimizationProperties.getFastPathMode())
                 .put("fastModel", optimizationProperties.getFastModel())
-                .put("fastPathMatched", false)
-                .put("fastPathReason", "deep_review")
+                .put("fastPathMatched", optimizationDecision.isFastPathMatched())
+                .put("fastPathReason", optimizationDecision.getFastPathReason())
                 .put("compactPromptEnabled", optimizationProperties.isCompactPromptEnabled())
                 .put("originalPromptCharacters", optimizationContext.getOriginalPromptCharacters())
                 .put("compactPromptCharacters", optimizationContext.getCompactPromptCharacters())
@@ -381,8 +386,16 @@ public class PrReviewRunner implements ApplicationRunner {
                 return;
             }
             if (fastCommentId == null) {
-                fastCommentId = githubPullRequestCommentClient.createComment(enrichedInput.getPrContext(), commentBody);
-                commentSpan.put("commentCreated", true);
+                OptionalLong existingCommentId = githubPullRequestCommentClient.findExistingReviewComment(enrichedInput.getPrContext());
+                if (existingCommentId.isPresent()) {
+                    fastCommentId = existingCommentId.getAsLong();
+                    githubPullRequestCommentClient.updateComment(enrichedInput.getPrContext(), fastCommentId, commentBody);
+                    commentSpan.put("commentReused", true);
+                    commentSpan.put("commentUpdated", true);
+                } else {
+                    fastCommentId = githubPullRequestCommentClient.createComment(enrichedInput.getPrContext(), commentBody);
+                    commentSpan.put("commentCreated", true);
+                }
             } else {
                 githubPullRequestCommentClient.updateComment(enrichedInput.getPrContext(), fastCommentId, commentBody);
                 commentSpan.put("commentUpdated", true);
@@ -499,5 +512,38 @@ public class PrReviewRunner implements ApplicationRunner {
         return result.getFindings().stream()
                 .filter(finding -> severity.equalsIgnoreCase(finding.getSeverity()))
                 .count();
+    }
+
+    private enum ReviewMode {
+        FAST("fast"),
+        DEEP("deep"),
+        FULL("full");
+
+        private final String configValue;
+
+        ReviewMode(String configValue) {
+            this.configValue = configValue;
+        }
+
+        private boolean runsFastReview() {
+            return this == FAST || this == FULL;
+        }
+
+        private boolean runsDeepReview() {
+            return this == DEEP || this == FULL;
+        }
+
+        private static ReviewMode from(String value) {
+            if (value == null || value.isBlank()) {
+                return FULL;
+            }
+            String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+            for (ReviewMode mode : values()) {
+                if (mode.configValue.equals(normalized)) {
+                    return mode;
+                }
+            }
+            throw new IllegalArgumentException("Unsupported Prysm review mode: " + value);
+        }
     }
 }

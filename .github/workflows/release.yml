@@ -1,0 +1,45 @@
+name: Prysm Release
+
+on:
+  push:
+    tags:
+      - v*
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build Release Jar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: pom.xml
+
+      - name: Build Prysm jar
+        run: |
+          bash ./mvnw -q -DskipTests package
+          cp target/*.jar target/prysm.jar
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" target/prysm.jar --clobber
+          else
+            gh release create "$TAG_NAME" target/prysm.jar --generate-notes
+          fi

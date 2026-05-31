@@ -45,6 +45,9 @@ public class TraceSummary {
         if (commentWrittenValue == null) {
             commentWrittenValue = readLastBoolean(context, "github_comment_update", "commentWritten");
         }
+        if (commentWrittenValue == null) {
+            commentWrittenValue = readLastBoolean(context, "github_comment_fast", "commentWritten");
+        }
         this.commentWritten = commentWrittenValue;
         this.optimizationGroup = readLastString(context, "llm_review_deep", "optimizationGroup");
         this.modelName = readLastString(context, "llm_review_deep", "modelName");

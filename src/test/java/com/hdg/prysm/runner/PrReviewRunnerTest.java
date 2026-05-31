@@ -92,7 +92,8 @@ class PrReviewRunnerTest {
                 false,
                 true,
                 "test-model",
-                "fast-model"
+                "fast-model",
+                "full"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -157,7 +158,8 @@ class PrReviewRunnerTest {
                 true,
                 true,
                 "test-model",
-                "fast-model"
+                "fast-model",
+                "full"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -272,7 +274,8 @@ class PrReviewRunnerTest {
                 true,
                 true,
                 "test-model",
-                "fast-model"
+                "fast-model",
+                "full"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -389,7 +392,8 @@ class PrReviewRunnerTest {
                 true,
                 true,
                 "test-model",
-                "fast-model"
+                "fast-model",
+                "full"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -398,6 +402,74 @@ class PrReviewRunnerTest {
         verify(commentClient, never()).createComment(context, "fast review comment");
         verify(commentClient).updateComment(context, 12345L, "fast review comment");
         verify(commentClient).updateComment(context, 12345L, "review comment");
+    }
+
+    @Test
+    void shouldRunOnlyFastReviewInFastMode() {
+        ReviewFixture fixture = reviewFixture("fast", true);
+        when(fixture.commentClient.findExistingReviewComment(fixture.context)).thenReturn(OptionalLong.empty());
+        when(fixture.commentClient.createComment(fixture.context, "fast review comment")).thenReturn(12345L);
+
+        fixture.runner.run(new DefaultApplicationArguments());
+
+        verify(fixture.llmReviewRunner).run(fixture.enrichedInput);
+        verify(fixture.aggregator).aggregate(
+                org.mockito.ArgumentMatchers.eq(fixture.enrichedInput),
+                org.mockito.ArgumentMatchers.eq(fixture.ruleResult),
+                org.mockito.ArgumentMatchers.any(LlmReviewResult.class)
+        );
+        verify(fixture.commentRenderer).renderFastReview(fixture.aggregationResult);
+        verify(fixture.commentRenderer, never()).render(org.mockito.ArgumentMatchers.any());
+        verify(fixture.commentClient).createComment(fixture.context, "fast review comment");
+        verify(fixture.commentClient, never()).updateComment(
+                org.mockito.ArgumentMatchers.eq(fixture.context),
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.eq("review comment")
+        );
+    }
+
+    @Test
+    void shouldRunOnlyDeepReviewAndReuseFastCommentInDeepMode() {
+        ReviewFixture fixture = reviewFixture("deep", true);
+        when(fixture.commentClient.findExistingReviewComment(fixture.context)).thenReturn(OptionalLong.of(12345L));
+
+        fixture.runner.run(new DefaultApplicationArguments());
+
+        verify(fixture.llmReviewRunner).run(fixture.enrichedInput);
+        verify(fixture.aggregator).aggregate(
+                org.mockito.ArgumentMatchers.eq(fixture.enrichedInput),
+                org.mockito.ArgumentMatchers.eq(fixture.ruleResult),
+                org.mockito.ArgumentMatchers.any(LlmReviewResult.class)
+        );
+        verify(fixture.commentRenderer, never()).renderFastReview(org.mockito.ArgumentMatchers.any());
+        verify(fixture.commentRenderer).render(fixture.aggregationResult);
+        verify(fixture.commentClient).findExistingReviewComment(fixture.context);
+        verify(fixture.commentClient).updateComment(fixture.context, 12345L, "review comment");
+        verify(fixture.commentClient, never()).createComment(fixture.context, "review comment");
+    }
+
+    @Test
+    void shouldApplyOptimizationPlannerDecisionBeforeDeepReview() {
+        LlmOptimizationContext optimizationContext = new LlmOptimizationContext();
+        ReviewFixture fixture = reviewFixture(
+                "deep",
+                false,
+                new PrChangedFile("README.md", PrChangedFileStatus.MODIFIED, 2, 1, "@@ -1 +1 @@"),
+                fastPathOptimizationProperties(),
+                optimizationContext
+        );
+
+        fixture.runner.run(new DefaultApplicationArguments());
+
+        org.junit.jupiter.api.Assertions.assertTrue(optimizationContext.getCurrentDecision().isFastPathMatched());
+        org.junit.jupiter.api.Assertions.assertEquals(
+                "small_doc_or_workflow_pr",
+                optimizationContext.getCurrentDecision().getFastPathReason()
+        );
+        org.junit.jupiter.api.Assertions.assertEquals(
+                "fast-model",
+                optimizationContext.getCurrentDecision().getEffectiveModel()
+        );
     }
 
     /**
@@ -489,7 +561,8 @@ class PrReviewRunnerTest {
                 true,
                 false,
                 "test-model",
-                "fast-model"
+                "fast-model",
+                "full"
         );
 
         runner.run(new DefaultApplicationArguments());
@@ -554,7 +627,8 @@ class PrReviewRunnerTest {
                 true,
                 true,
                 "test-model",
-                "fast-model"
+                "fast-model",
+                "full"
         );
 
         org.junit.jupiter.api.Assertions.assertThrows(
@@ -578,8 +652,158 @@ class PrReviewRunnerTest {
         );
     }
 
+    private static LlmOptimizationProperties fastPathOptimizationProperties() {
+        return new LlmOptimizationProperties(
+                "exp_2_fast_path",
+                0,
+                false,
+                800,
+                true,
+                "fast_model",
+                "fast-model",
+                false
+        );
+    }
+
     private static LlmOptimizationPlanner baselineOptimizationPlanner() {
         return new LlmOptimizationPlanner(baselineOptimizationProperties(), "test-model");
+    }
+
+    private static ReviewFixture reviewFixture(String reviewMode, boolean commentEnabled) {
+        return reviewFixture(
+                reviewMode,
+                commentEnabled,
+                new PrChangedFile("src/App.java", PrChangedFileStatus.MODIFIED, 1, 1, "@@ -1 +1 @@"),
+                baselineOptimizationProperties(),
+                new LlmOptimizationContext()
+        );
+    }
+
+    private static ReviewFixture reviewFixture(
+            String reviewMode,
+            boolean commentEnabled,
+            PrChangedFile changedFile,
+            LlmOptimizationProperties optimizationProperties,
+            LlmOptimizationContext optimizationContext
+    ) {
+        PrContextResolver resolver = mock(PrContextResolver.class);
+        PrDiffProvider diffProvider = mock(PrDiffProvider.class);
+        PrReviewContextLoader reviewContextLoader = mock(PrReviewContextLoader.class);
+        ReviewFileSelectionService selectionService = mock(ReviewFileSelectionService.class);
+        ReviewContextBudgetService budgetService = mock(ReviewContextBudgetService.class);
+        ReviewExecutionInputAssembler inputAssembler = mock(ReviewExecutionInputAssembler.class);
+        ReviewContextEnrichmentService enrichmentService = mock(ReviewContextEnrichmentService.class);
+        RuleEngineRunner ruleEngineRunner = mock(RuleEngineRunner.class);
+        LlmReviewRunner llmReviewRunner = mock(LlmReviewRunner.class);
+        ReviewResultAggregator aggregator = mock(ReviewResultAggregator.class);
+        ReviewCommentRenderer commentRenderer = mock(ReviewCommentRenderer.class);
+        GithubPullRequestCommentClient commentClient = mock(GithubPullRequestCommentClient.class);
+        TraceRecorder traceRecorder = new TraceRecorder();
+        TraceReporter traceReporter = mock(TraceReporter.class);
+
+        PrContext context = new PrContext("chinensdkcsdck", "PRysm", 3);
+        PrDiff diff = new PrDiff(
+                context,
+                List.of(changedFile)
+        );
+        PrReviewContext reviewContext = new PrReviewContext(diff, List.of());
+        ReviewFileSelectionResult selectionResult = new ReviewFileSelectionResult(reviewContext, List.of());
+        ReviewContextBudgetResult budgetResult = new ReviewContextBudgetResult(selectionResult, List.of(), 32000);
+        ReviewExecutionInput executionInput = new ReviewExecutionInput(
+                context,
+                diff,
+                List.of(),
+                new ContextStatus(ContextStatusCode.FULL, "full"),
+                new PromptPayload("system", "user", "{}")
+        );
+        ReviewExecutionInput enrichedInput = new ReviewExecutionInput(
+                context,
+                diff,
+                List.of(),
+                new ContextStatus(ContextStatusCode.FULL, "full"),
+                new PromptPayload("system", "enriched user", "{}")
+        );
+        RuleEngineResult ruleResult = new RuleEngineResult(List.of(), "no rule findings");
+        LlmReviewResult llmResult = new LlmReviewResult(List.of(), "no llm findings", null);
+        ReviewAggregationResult aggregationResult = new ReviewAggregationResult(
+                List.of(),
+                0,
+                0,
+                0,
+                ruleResult.getSummary(),
+                llmResult.getSummary()
+        );
+
+        when(resolver.resolve()).thenReturn(context);
+        when(diffProvider.fetch(context)).thenReturn(diff);
+        when(reviewContextLoader.load(diff)).thenReturn(reviewContext);
+        when(selectionService.select(reviewContext)).thenReturn(selectionResult);
+        when(budgetService.allocate(selectionResult)).thenReturn(budgetResult);
+        when(inputAssembler.assemble(budgetResult)).thenReturn(executionInput);
+        when(enrichmentService.enrich(executionInput)).thenReturn(enrichedInput);
+        when(ruleEngineRunner.run(enrichedInput)).thenReturn(ruleResult);
+        when(llmReviewRunner.run(enrichedInput)).thenReturn(llmResult);
+        when(aggregator.aggregate(
+                org.mockito.ArgumentMatchers.eq(enrichedInput),
+                org.mockito.ArgumentMatchers.eq(ruleResult),
+                org.mockito.ArgumentMatchers.any(LlmReviewResult.class)
+        )).thenReturn(aggregationResult);
+        when(commentRenderer.renderFastReview(aggregationResult)).thenReturn("fast review comment");
+        when(commentRenderer.render(aggregationResult)).thenReturn("review comment");
+
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("GITHUB_ACTIONS", "true");
+        PrReviewRunner runner = new PrReviewRunner(
+                resolver,
+                diffProvider,
+                reviewContextLoader,
+                selectionService,
+                budgetService,
+                inputAssembler,
+                enrichmentService,
+                ruleEngineRunner,
+                llmReviewRunner,
+                aggregator,
+                commentRenderer,
+                commentClient,
+                new ReviewFindingQualityGate(),
+                optimizationProperties,
+                new LlmOptimizationPlanner(optimizationProperties, "test-model"),
+                optimizationContext,
+                traceRecorder,
+                traceReporter,
+                environment,
+                true,
+                commentEnabled,
+                "test-model",
+                "fast-model",
+                reviewMode
+        );
+
+        return new ReviewFixture(
+                llmReviewRunner,
+                aggregator,
+                commentRenderer,
+                commentClient,
+                context,
+                enrichedInput,
+                ruleResult,
+                aggregationResult,
+                runner
+        );
+    }
+
+    private record ReviewFixture(
+            LlmReviewRunner llmReviewRunner,
+            ReviewResultAggregator aggregator,
+            ReviewCommentRenderer commentRenderer,
+            GithubPullRequestCommentClient commentClient,
+            PrContext context,
+            ReviewExecutionInput enrichedInput,
+            RuleEngineResult ruleResult,
+            ReviewAggregationResult aggregationResult,
+            PrReviewRunner runner
+    ) {
     }
 }
 
