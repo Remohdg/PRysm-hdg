@@ -74,4 +74,17 @@ class TraceSummaryTest {
         assertEquals(TraceStatus.DEGRADED, summary.getStatus());
         assertNull(summary.getFailedStep());
     }
+
+    @Test
+    void shouldReadFastCommentWriteStatus() {
+        TraceContext context = TraceContext.create("trace-4", Instant.now());
+        TraceSpan comment = new TraceSpan("github_comment_fast", Instant.now());
+        comment.put("commentWritten", true);
+        comment.finish(TraceStatus.SUCCESS, Instant.now());
+        context.addSpan(comment);
+
+        TraceSummary summary = new TraceSummary(context);
+
+        assertEquals(true, summary.getCommentWritten());
+    }
 }
