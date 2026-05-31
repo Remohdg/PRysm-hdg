@@ -17,6 +17,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.OptionalLong;
 
 /**
  * Writes the aggregated PR12 review result as one GitHub pull request comment.
@@ -136,6 +137,34 @@ public class GithubPullRequestCommentClient {
         }
     }
 
+    public OptionalLong findExistingReviewComment(PrContext context) {
+        if (context == null) {
+            throw new IllegalArgumentException("Pull request context must not be null");
+        }
+
+        String token = requireGithubToken();
+        HttpRequest request = HttpRequest.newBuilder(commentUri(context))
+                .timeout(Duration.ofSeconds(30))
+                .header("Accept", "application/vnd.github+json")
+                .header("Authorization", "Bearer " + token)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .build();
+
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException("GitHub pull request comments lookup failed with status " + response.statusCode());
+            }
+            return readExistingReviewCommentId(response.body());
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to lookup GitHub pull request comments", exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("GitHub pull request comments lookup was interrupted", exception);
+        }
+    }
+
     private URI commentUri(PrContext context) {
         return URI.create(apiBaseUrl
                 + "/repos/"
@@ -178,6 +207,33 @@ public class GithubPullRequestCommentClient {
             throw new IllegalStateException("GitHub pull request comment response is missing id");
         }
         return id.asLong();
+    }
+
+    private OptionalLong readExistingReviewCommentId(String body) {
+        JsonNode root = objectMapper.readTree(body == null || body.isBlank() ? "[]" : body);
+        if (!root.isArray()) {
+            throw new IllegalStateException("GitHub pull request comments response must be an array");
+        }
+
+        OptionalLong commentId = OptionalLong.empty();
+        for (JsonNode comment : root) {
+            JsonNode id = comment.get("id");
+            JsonNode commentBody = comment.get("body");
+            if (id != null
+                    && id.canConvertToLong()
+                    && id.asLong() > 0
+                    && commentBody != null
+                    && isReviewComment(commentBody.asText())) {
+                commentId = OptionalLong.of(id.asLong());
+            }
+        }
+        return commentId;
+    }
+
+    private static boolean isReviewComment(String body) {
+        return body != null
+                && (body.contains("## PRysm Fast Review Result")
+                || body.contains("## PRysm Review Result"));
     }
 
     private static String trimTrailingSlash(String value) {

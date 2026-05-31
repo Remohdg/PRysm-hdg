@@ -9,6 +9,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.OptionalLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -63,6 +64,33 @@ class GithubPullRequestCommentClientTest {
         assertEquals("https://api.github.test/repos/chinensdkcsdck/PRysm/issues/comments/12345", request.uri().toString());
         assertEquals("PATCH", request.method());
         assertEquals("Bearer ghs_test_token", request.headers().firstValue("Authorization").orElseThrow());
+    }
+
+    @Test
+    void shouldFindLatestExistingReviewComment() throws Exception {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("GITHUB_TOKEN", "ghs_test_token");
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.body()).thenReturn("""
+                [
+                  {"id":111,"body":"unrelated comment"},
+                  {"id":222,"body":"## PRysm Fast Review Result\\n\\nold fast result"},
+                  {"id":333,"body":"## PRysm Review Result\\n\\nlatest result"}
+                ]
+                """);
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(response);
+        GithubPullRequestCommentClient client = newClient(environment, httpClient);
+
+        OptionalLong commentId = client.findExistingReviewComment(new PrContext("chinensdkcsdck", "PRysm", 12));
+
+        assertEquals(333L, commentId.orElseThrow());
+        ArgumentCaptor<HttpRequest> requestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(httpClient).send(requestCaptor.capture(), anyStringBodyHandler());
+        HttpRequest request = requestCaptor.getValue();
+        assertEquals("https://api.github.test/repos/chinensdkcsdck/PRysm/issues/12/comments", request.uri().toString());
+        assertEquals("GET", request.method());
     }
 
     @Test

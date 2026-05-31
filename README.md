@@ -46,3 +46,7 @@ with:
 Workflow smoke test for PR review comment writeback.
 
 Optimization defaults smoke test.
+
+Test2 branch smoke test.
+
+Test2 follow-up smoke test.

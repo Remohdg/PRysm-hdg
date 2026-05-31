@@ -37,6 +37,7 @@ import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.mock.env.MockEnvironment;
 
 import java.util.List;
+import java.util.OptionalLong;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -237,6 +238,7 @@ class PrReviewRunnerTest {
         when(aggregator.aggregate(enrichedInput, ruleResult, llmResult)).thenReturn(aggregationResult);
         when(commentRenderer.renderFastReview(aggregationResult)).thenReturn("fast review comment");
         when(commentRenderer.render(aggregationResult)).thenReturn("review comment");
+        when(commentClient.findExistingReviewComment(context)).thenReturn(OptionalLong.empty());
         when(commentClient.createComment(context, "fast review comment")).thenReturn(12345L);
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("GITHUB_ACTIONS", "true");
@@ -282,6 +284,103 @@ class PrReviewRunnerTest {
         verify(commentClient).createComment(context, "fast review comment");
         verify(commentClient).updateComment(context, 12345L, "review comment");
         verify(traceReporter).report(org.mockito.ArgumentMatchers.any(TraceContext.class));
+    }
+
+    @Test
+    void shouldReuseExistingReviewCommentForFastReview() {
+        PrContextResolver resolver = mock(PrContextResolver.class);
+        PrDiffProvider diffProvider = mock(PrDiffProvider.class);
+        PrReviewContextLoader reviewContextLoader = mock(PrReviewContextLoader.class);
+        ReviewFileSelectionService selectionService = mock(ReviewFileSelectionService.class);
+        ReviewContextBudgetService budgetService = mock(ReviewContextBudgetService.class);
+        ReviewExecutionInputAssembler inputAssembler = mock(ReviewExecutionInputAssembler.class);
+        ReviewContextEnrichmentService enrichmentService = mock(ReviewContextEnrichmentService.class);
+        RuleEngineRunner ruleEngineRunner = mock(RuleEngineRunner.class);
+        LlmReviewRunner llmReviewRunner = mock(LlmReviewRunner.class);
+        ReviewResultAggregator aggregator = mock(ReviewResultAggregator.class);
+        ReviewCommentRenderer commentRenderer = mock(ReviewCommentRenderer.class);
+        GithubPullRequestCommentClient commentClient = mock(GithubPullRequestCommentClient.class);
+        TraceRecorder traceRecorder = new TraceRecorder();
+        TraceReporter traceReporter = mock(TraceReporter.class);
+
+        PrContext context = new PrContext("chinensdkcsdck", "PRysm", 3);
+        PrDiff diff = new PrDiff(
+                context,
+                List.of(new PrChangedFile("README.md", PrChangedFileStatus.MODIFIED, 1, 1, "@@ -1 +1 @@"))
+        );
+        PrReviewContext reviewContext = new PrReviewContext(diff, List.of());
+        ReviewFileSelectionResult selectionResult = new ReviewFileSelectionResult(reviewContext, List.of());
+        ReviewContextBudgetResult budgetResult = new ReviewContextBudgetResult(selectionResult, List.of(), 32000);
+        ReviewExecutionInput executionInput = new ReviewExecutionInput(
+                context,
+                diff,
+                List.of(),
+                new ContextStatus(ContextStatusCode.SKIPPED, "no files selected"),
+                new PromptPayload("system", "user", "{}")
+        );
+        ReviewExecutionInput enrichedInput = new ReviewExecutionInput(
+                context,
+                diff,
+                List.of(),
+                new ContextStatus(ContextStatusCode.LIMITED, "metadata unavailable"),
+                new PromptPayload("system", "enriched user", "{}")
+        );
+        RuleEngineResult ruleResult = new RuleEngineResult(List.of(), "no rule findings");
+        LlmReviewResult llmResult = new LlmReviewResult(List.of(), "no llm findings", null);
+        ReviewAggregationResult aggregationResult = new ReviewAggregationResult(
+                List.of(),
+                0,
+                0,
+                0,
+                ruleResult.getSummary(),
+                llmResult.getSummary()
+        );
+        when(resolver.resolve()).thenReturn(context);
+        when(diffProvider.fetch(context)).thenReturn(diff);
+        when(reviewContextLoader.load(diff)).thenReturn(reviewContext);
+        when(selectionService.select(reviewContext)).thenReturn(selectionResult);
+        when(budgetService.allocate(selectionResult)).thenReturn(budgetResult);
+        when(inputAssembler.assemble(budgetResult)).thenReturn(executionInput);
+        when(enrichmentService.enrich(executionInput)).thenReturn(enrichedInput);
+        when(ruleEngineRunner.run(enrichedInput)).thenReturn(ruleResult);
+        when(llmReviewRunner.run(enrichedInput)).thenReturn(llmResult);
+        when(aggregator.aggregate(enrichedInput, ruleResult, llmResult)).thenReturn(aggregationResult);
+        when(commentRenderer.renderFastReview(aggregationResult)).thenReturn("fast review comment");
+        when(commentRenderer.render(aggregationResult)).thenReturn("review comment");
+        when(commentClient.findExistingReviewComment(context)).thenReturn(OptionalLong.of(12345L));
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("GITHUB_ACTIONS", "true");
+        PrReviewRunner runner = new PrReviewRunner(
+                resolver,
+                diffProvider,
+                reviewContextLoader,
+                selectionService,
+                budgetService,
+                inputAssembler,
+                enrichmentService,
+                ruleEngineRunner,
+                llmReviewRunner,
+                aggregator,
+                commentRenderer,
+                commentClient,
+                baselineOptimizationProperties(),
+                baselineOptimizationPlanner(),
+                new LlmOptimizationContext(),
+                traceRecorder,
+                traceReporter,
+                environment,
+                true,
+                true,
+                "test-model",
+                "fast-model"
+        );
+
+        runner.run(new DefaultApplicationArguments());
+
+        verify(commentClient).findExistingReviewComment(context);
+        verify(commentClient, never()).createComment(context, "fast review comment");
+        verify(commentClient).updateComment(context, 12345L, "fast review comment");
+        verify(commentClient).updateComment(context, 12345L, "review comment");
     }
 
     /**
