@@ -45,6 +45,7 @@ class BuiltInRuleEngineTest {
         assertEquals("src/App.java", finding.getFilePath());
         assertEquals(2, finding.getLine());
         assertEquals("RIGHT", finding.getSide());
+        assertEquals("发现调试输出", finding.getTitle());
     }
 
     /**
@@ -69,6 +70,7 @@ class BuiltInRuleEngineTest {
         assertEquals("BUILTIN_CONFLICT_MARKER", finding.getRuleId());
         assertEquals(2, finding.getLine());
         assertEquals("HIGH", finding.getSeverity());
+        assertEquals("发现合并冲突标记", finding.getTitle());
     }
 
     /**
@@ -89,7 +91,7 @@ class BuiltInRuleEngineTest {
         RuleEngineResult result = new BuiltInRuleEngine().run(input);
 
         assertTrue(result.getFindings().isEmpty());
-        assertEquals("Built-in rules found no issues.", result.getSummary());
+        assertEquals("内置规则未发现问题。", result.getSummary());
     }
 
     /**

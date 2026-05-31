@@ -45,8 +45,8 @@ public class BuiltInRuleEngine implements RuleEngine {
         }
 
         String summary = findings.isEmpty()
-                ? "Built-in rules found no issues."
-                : "Built-in rules found " + findings.size() + " issue(s).";
+                ? "内置规则未发现问题。"
+                : "内置规则发现 " + findings.size() + " 个问题。";
         return new RuleEngineResult(findings, summary);
     }
 
@@ -167,9 +167,9 @@ public class BuiltInRuleEngine implements RuleEngine {
                 RIGHT_SIDE,
                 lineNumber,
                 RIGHT_SIDE,
-                "Merge conflict marker found",
-                "The changed code contains a merge conflict marker.",
-                "Resolve the conflict marker before merging this pull request.",
+                "发现合并冲突标记",
+                "变更代码中仍包含合并冲突标记。",
+                "请先解决冲突标记，再合并这个 Pull Request。",
                 "BUILTIN_CONFLICT_MARKER"
         );
     }
@@ -187,9 +187,9 @@ public class BuiltInRuleEngine implements RuleEngine {
                 RIGHT_SIDE,
                 lineNumber,
                 RIGHT_SIDE,
-                "Debug output found",
-                "The changed Java code writes directly to standard output.",
-                "Use the project logger or remove the debug output.",
+                "发现调试输出",
+                "变更的 Java 代码直接写入标准输出。",
+                "请使用项目日志组件，或移除这处调试输出。",
                 "BUILTIN_SYSTEM_OUT"
         );
     }

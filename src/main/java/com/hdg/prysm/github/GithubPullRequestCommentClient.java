@@ -201,7 +201,9 @@ public class GithubPullRequestCommentClient {
     private static boolean isReviewComment(String body) {
         return body != null
                 && (body.contains("## PRysm Fast Review Result")
-                || body.contains("## PRysm Review Result"));
+                || body.contains("## PRysm Review Result")
+                || body.contains("## PRysm 快速审查结果")
+                || body.contains("## PRysm 审查结果"));
     }
 
 }

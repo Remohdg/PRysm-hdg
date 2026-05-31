@@ -36,12 +36,12 @@ class ReviewCommentRendererTest {
 
         String markdown = new ReviewCommentRenderer().render(result);
 
-        assertTrue(markdown.contains("## PRysm Review Result"));
-        assertTrue(markdown.contains("Found 1 issue(s). Rule findings: 1, LLM findings: 0, duplicates removed: 0."));
+        assertTrue(markdown.contains("## PRysm 审查结果"));
+        assertTrue(markdown.contains("发现 1 个问题。规则结果: 1，模型结果: 0，去重数量: 0。"));
         assertTrue(markdown.contains("### src/App.java"));
-        assertTrue(markdown.contains("**[HIGH] Merge conflict marker found** (line 12)"));
-        assertTrue(markdown.contains("Source: `builtin` / Rule: `BUILTIN_CONFLICT_MARKER`"));
-        assertTrue(markdown.contains("Suggestion: Resolve the marker."));
+        assertTrue(markdown.contains("**[HIGH] Merge conflict marker found** (第 12 行)"));
+        assertTrue(markdown.contains("来源: `builtin` / 规则: `BUILTIN_CONFLICT_MARKER`"));
+        assertTrue(markdown.contains("建议: Resolve the marker."));
     }
 
     @Test
@@ -57,7 +57,7 @@ class ReviewCommentRendererTest {
 
         String markdown = new ReviewCommentRenderer().render(result);
 
-        assertTrue(markdown.contains("Found 0 issue(s)."));
-        assertTrue(markdown.contains("No actionable findings were reported."));
+        assertTrue(markdown.contains("发现 0 个问题。"));
+        assertTrue(markdown.contains("未发现需要处理的明确问题。"));
     }
 }

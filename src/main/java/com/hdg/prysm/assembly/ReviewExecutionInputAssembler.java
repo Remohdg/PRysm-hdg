@@ -32,6 +32,7 @@ public class ReviewExecutionInputAssembler {
             你只能基于输入中提供的 patch、代码片段和元数据进行审查。
             不要编造输入中不存在的文件、行号、API、依赖或运行时行为。
             优先关注正确性、安全性、可维护性、可靠性和测试影响。
+            除文件路径、代码标识符、API 名称、错误码和枚举值外，summary、title、message、suggestion 等面向用户的文本必须使用简体中文。
             只返回符合输出 schema 的 JSON，不要输出 Markdown 或额外解释。
             """;
 
@@ -48,9 +49,9 @@ public class ReviewExecutionInputAssembler {
                   "side": "RIGHT",
                   "line": 1,
                   "startSide": "RIGHT",
-                  "title": "问题标题",
-                  "message": "说明为什么这是问题。",
-                  "suggestion": "给出具体修改方向。",
+                  "title": "使用简体中文描述问题标题",
+                  "message": "使用简体中文说明为什么这是问题。",
+                  "suggestion": "使用简体中文给出具体修改方向。",
                   "ruleId": "LLM_RULE_ID",
                   "confidence": "HIGH|MEDIUM|LOW",
                   "category": "bug|security|secret|workflow|config|test|maintainability|documentation"
@@ -60,7 +61,7 @@ public class ReviewExecutionInputAssembler {
             """;
 
     private static final String COMPACT_OUTPUT_SCHEMA = """
-            {"summary":"string","findings":[{"severity":"error|warning|info","filePath":"string","startLine":1,"endLine":1,"line":1,"title":"string","message":"string","suggestion":"string","ruleId":"LLM_RULE_ID","confidence":"HIGH|MEDIUM|LOW","category":"bug|security|secret|workflow|config|test|maintainability|documentation"}]}
+            {"summary":"简体中文 string","findings":[{"severity":"error|warning|info","filePath":"string","startLine":1,"endLine":1,"line":1,"title":"简体中文 string","message":"简体中文 string","suggestion":"简体中文 string","ruleId":"LLM_RULE_ID","confidence":"HIGH|MEDIUM|LOW","category":"bug|security|secret|workflow|config|test|maintainability|documentation"}]}
             """;
 
     private final LlmOptimizationProperties optimizationProperties;
