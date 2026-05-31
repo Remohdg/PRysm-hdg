@@ -38,6 +38,8 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
+import java.util.OptionalLong;
+
 /**
  * Prysm 的一次性任务入口。
  *
@@ -446,7 +448,16 @@ public class PrReviewRunner implements ApplicationRunner {
                 commentSpan.finish(TraceStatus.SKIPPED, java.time.Instant.now());
                 return null;
             }
-            long commentId = githubPullRequestCommentClient.createComment(enrichedInput.getPrContext(), commentBody);
+            OptionalLong existingCommentId = githubPullRequestCommentClient.findExistingReviewComment(enrichedInput.getPrContext());
+            long commentId;
+            if (existingCommentId.isPresent()) {
+                commentId = existingCommentId.getAsLong();
+                githubPullRequestCommentClient.updateComment(enrichedInput.getPrContext(), commentId, commentBody);
+                commentSpan.put("commentReused", true);
+            } else {
+                commentId = githubPullRequestCommentClient.createComment(enrichedInput.getPrContext(), commentBody);
+                commentSpan.put("commentCreated", true);
+            }
             commentSpan.put("commentId", commentId);
             commentSpan.put("commentWritten", true);
             commentSpan.finish(TraceStatus.SUCCESS, java.time.Instant.now());
