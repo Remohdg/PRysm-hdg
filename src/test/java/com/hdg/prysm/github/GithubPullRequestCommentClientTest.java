@@ -77,7 +77,7 @@ class GithubPullRequestCommentClientTest {
                 [
                   {"id":111,"body":"unrelated comment"},
                   {"id":222,"body":"## PRysm Fast Review Result\\n\\nold fast result"},
-                  {"id":333,"body":"## PRysm Review Result\\n\\nlatest result"}
+                  {"id":333,"body":"## PRysm 审查结果\\n\\nlatest result"}
                 ]
                 """);
         when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(response);

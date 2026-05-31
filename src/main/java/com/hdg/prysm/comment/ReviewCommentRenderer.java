@@ -9,19 +9,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Renders aggregated findings as one pull request comment.
+ * 将聚合后的 findings 渲染为一条 Pull Request 评论。
  */
 @Component
 public class ReviewCommentRenderer {
 
     public String render(ReviewAggregationResult result) {
-        return render(result, "## PRysm Review Result", null);
+        return render(result, "## PRysm 审查结果", null);
     }
 
     public String renderFastReview(ReviewAggregationResult result) {
         return render(
                 result,
-                "## PRysm Fast Review Result",
+                "## PRysm 快速审查结果",
                 "快速初筛完成。深度审查仍在进行，稍后会更新本评论；以下结果可能被深度审查修正。"
         );
     }
@@ -38,22 +38,22 @@ public class ReviewCommentRenderer {
                     .append(escapeMarkdownText(notice))
                     .append("\n\n");
         }
-        markdown.append("Found ")
+        markdown.append("发现 ")
                 .append(result.getFindings().size())
-                .append(" issue(s).");
-        markdown.append(" Rule findings: ")
+                .append(" 个问题。");
+        markdown.append("规则结果: ")
                 .append(result.getRuleFindingCount())
-                .append(", LLM findings: ")
+                .append("，模型结果: ")
                 .append(result.getLlmFindingCount())
-                .append(", duplicates removed: ")
+                .append("，去重数量: ")
                 .append(result.getDuplicateCount())
-                .append(".\n\n");
+                .append("。\n\n");
 
-        appendSummary(markdown, "Rule summary", result.getRuleSummary());
-        appendSummary(markdown, "LLM summary", result.getLlmSummary());
+        appendSummary(markdown, "规则摘要", result.getRuleSummary());
+        appendSummary(markdown, "模型摘要", result.getLlmSummary());
 
         if (!result.hasFindings()) {
-            markdown.append("No actionable findings were reported.\n");
+            markdown.append("未发现需要处理的明确问题。\n");
             return markdown.toString();
         }
 
@@ -100,20 +100,20 @@ public class ReviewCommentRenderer {
             markdown.append(" (").append(location).append(")");
         }
         markdown.append("\n");
-        markdown.append("  - Source: `")
+        markdown.append("  - 来源: `")
                 .append(escapeCodeText(finding.getSource()))
                 .append("`");
         if (finding.getRuleId() != null && !finding.getRuleId().isBlank()) {
-            markdown.append(" / Rule: `")
+            markdown.append(" / 规则: `")
                     .append(escapeCodeText(finding.getRuleId()))
                     .append("`");
         }
         markdown.append("\n");
-        markdown.append("  - Detail: ")
+        markdown.append("  - 说明: ")
                 .append(escapeMarkdownText(finding.getMessage()))
                 .append("\n");
         if (finding.getSuggestion() != null && !finding.getSuggestion().isBlank()) {
-            markdown.append("  - Suggestion: ")
+            markdown.append("  - 建议: ")
                     .append(escapeMarkdownText(finding.getSuggestion()))
                     .append("\n");
         }
@@ -122,23 +122,23 @@ public class ReviewCommentRenderer {
 
     private static String location(ReviewFinding finding) {
         if (finding.getLine() != null) {
-            return "line " + finding.getLine();
+            return "第 " + finding.getLine() + " 行";
         }
         if (finding.getStartLine() != null && finding.getEndLine() != null) {
             if (finding.getStartLine().equals(finding.getEndLine())) {
-                return "line " + finding.getStartLine();
+                return "第 " + finding.getStartLine() + " 行";
             }
-            return "lines " + finding.getStartLine() + "-" + finding.getEndLine();
+            return "第 " + finding.getStartLine() + "-" + finding.getEndLine() + " 行";
         }
         if (finding.getStartLine() != null) {
-            return "line " + finding.getStartLine();
+            return "第 " + finding.getStartLine() + " 行";
         }
         return "";
     }
 
     private static String displayFilePath(String filePath) {
         if (filePath == null || filePath.isBlank()) {
-            return "General";
+            return "通用问题";
         }
         return filePath;
     }
