@@ -27,12 +27,13 @@ class GithubPullRequestCommentClientTest {
         HttpClient httpClient = mock(HttpClient.class);
         HttpResponse<String> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(201);
-        when(response.body()).thenReturn("{}");
+        when(response.body()).thenReturn("{\"id\":12345}");
         when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(response);
         GithubPullRequestCommentClient client = newClient(environment, httpClient);
 
-        client.createComment(new PrContext("chinensdkcsdck", "PRysm", 12), "review body");
+        long commentId = client.createComment(new PrContext("chinensdkcsdck", "PRysm", 12), "review body");
 
+        assertEquals(12345L, commentId);
         ArgumentCaptor<HttpRequest> requestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
         verify(httpClient).send(requestCaptor.capture(), anyStringBodyHandler());
         HttpRequest request = requestCaptor.getValue();
@@ -41,6 +42,27 @@ class GithubPullRequestCommentClientTest {
         assertEquals("Bearer ghs_test_token", request.headers().firstValue("Authorization").orElseThrow());
         assertEquals("application/vnd.github+json", request.headers().firstValue("Accept").orElseThrow());
         assertEquals("application/json", request.headers().firstValue("Content-Type").orElseThrow());
+    }
+
+    @Test
+    void shouldUpdatePullRequestIssueComment() throws Exception {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("GITHUB_TOKEN", "ghs_test_token");
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.body()).thenReturn("{\"id\":12345}");
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(response);
+        GithubPullRequestCommentClient client = newClient(environment, httpClient);
+
+        client.updateComment(new PrContext("chinensdkcsdck", "PRysm", 12), 12345L, "updated body");
+
+        ArgumentCaptor<HttpRequest> requestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(httpClient).send(requestCaptor.capture(), anyStringBodyHandler());
+        HttpRequest request = requestCaptor.getValue();
+        assertEquals("https://api.github.test/repos/chinensdkcsdck/PRysm/issues/comments/12345", request.uri().toString());
+        assertEquals("PATCH", request.method());
+        assertEquals("Bearer ghs_test_token", request.headers().firstValue("Authorization").orElseThrow());
     }
 
     @Test

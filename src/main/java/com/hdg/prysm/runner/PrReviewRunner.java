@@ -69,6 +69,7 @@ public class PrReviewRunner implements ApplicationRunner {
     private final boolean runnerEnabled;
     private final boolean commentEnabled;
     private final String llmModel;
+    private final String fastModel;
 
     /**
      * 注入 PR 上下文解析器、运行环境和 Runner 开关。
@@ -94,7 +95,8 @@ public class PrReviewRunner implements ApplicationRunner {
             Environment environment,
             @Value("${prysm.runner.enabled:true}") boolean runnerEnabled,
             @Value("${prysm.comment.enabled:true}") boolean commentEnabled,
-            @Value("${prysm.llm.model:unknown}") String llmModel
+            @Value("${prysm.llm.model:unknown}") String llmModel,
+            @Value("${prysm.optimization.fast-path.fast-model:qwen-turbo}") String fastModel
     ) {
         this.prContextResolver = prContextResolver;
         this.prDiffProvider = prDiffProvider;
@@ -117,6 +119,7 @@ public class PrReviewRunner implements ApplicationRunner {
         this.runnerEnabled = runnerEnabled;
         this.commentEnabled = commentEnabled;
         this.llmModel = llmModel;
+        this.fastModel = fastModel;
     }
 
     /**
@@ -277,15 +280,25 @@ public class PrReviewRunner implements ApplicationRunner {
                 ruleResult.getSummary()
         );
 
-        LlmOptimizationDecision optimizationDecision = optimizationPlanner.plan(enrichedInput);
+        Long fastCommentId = commentEnabled
+                ? writeFastReviewComment(trace, enrichedInput, ruleResult)
+                : null;
+
+        LlmOptimizationDecision optimizationDecision = LlmOptimizationDecision.baseline(llmModel);
         optimizationContext.setCurrentDecision(optimizationDecision);
-        LlmReviewResult llmResult = traceRecorder.record(
-                trace,
-                "llm_review",
-                () -> llmReviewRunner.run(enrichedInput),
-                span -> {
-                }
-        );
+        LlmReviewResult llmResult;
+        optimizationContext.forceEffectiveModel(llmModel);
+        try {
+            llmResult = traceRecorder.record(
+                    trace,
+                    "llm_review_deep",
+                    () -> llmReviewRunner.run(enrichedInput),
+                    span -> {
+                    }
+            );
+        } finally {
+            optimizationContext.clearForcedEffectiveModel();
+        }
         TraceSpan llmSpan = trace.getSpans().getLast();
         int llmPromptCharacters = enrichedInput.getPromptPayload().getUserPrompt().length();
         llmSpan
@@ -299,8 +312,8 @@ public class PrReviewRunner implements ApplicationRunner {
                 .put("fastPathEnabled", optimizationProperties.isFastPathEnabled())
                 .put("fastPathMode", optimizationProperties.getFastPathMode())
                 .put("fastModel", optimizationProperties.getFastModel())
-                .put("fastPathMatched", optimizationDecision.isFastPathMatched())
-                .put("fastPathReason", optimizationDecision.getFastPathReason())
+                .put("fastPathMatched", false)
+                .put("fastPathReason", "deep_review")
                 .put("compactPromptEnabled", optimizationProperties.isCompactPromptEnabled())
                 .put("originalPromptCharacters", optimizationContext.getOriginalPromptCharacters())
                 .put("compactPromptCharacters", optimizationContext.getCompactPromptCharacters())
@@ -317,7 +330,7 @@ public class PrReviewRunner implements ApplicationRunner {
             llmSpan.finish(TraceStatus.DEGRADED, llmSpan.getEndedAt());
         }
         log.info(
-                "LLM review completed: findings={}, summary={}",
+                "Deep LLM review completed: findings={}, summary={}",
                 llmResult.getFindings().size(),
                 llmResult.getSummary()
         );
@@ -345,7 +358,7 @@ public class PrReviewRunner implements ApplicationRunner {
                 aggregationResult.getDuplicateCount()
         );
 
-        TraceSpan commentSpan = traceRecorder.start(trace, "github_comment");
+        TraceSpan commentSpan = traceRecorder.start(trace, "github_comment_update");
         try {
             String commentBody = reviewCommentRenderer.render(aggregationResult);
             commentSpan
@@ -357,10 +370,88 @@ public class PrReviewRunner implements ApplicationRunner {
                 log.info("Pull request comment writing is disabled.");
                 return;
             }
-            githubPullRequestCommentClient.createComment(enrichedInput.getPrContext(), commentBody);
+            if (fastCommentId == null) {
+                fastCommentId = githubPullRequestCommentClient.createComment(enrichedInput.getPrContext(), commentBody);
+                commentSpan.put("commentCreated", true);
+            } else {
+                githubPullRequestCommentClient.updateComment(enrichedInput.getPrContext(), fastCommentId, commentBody);
+                commentSpan.put("commentUpdated", true);
+            }
+            commentSpan.put("commentId", fastCommentId);
             commentSpan.put("commentWritten", true);
             commentSpan.finish(TraceStatus.SUCCESS, java.time.Instant.now());
-            log.info("Wrote aggregated review comment to pull request.");
+            log.info("Updated aggregated review comment on pull request.");
+        } catch (RuntimeException exception) {
+            commentSpan.put("commentWritten", false);
+            commentSpan.fail(exception, java.time.Instant.now());
+            throw exception;
+        }
+    }
+
+    private Long writeFastReviewComment(
+            TraceContext trace,
+            ReviewExecutionInput enrichedInput,
+            RuleEngineResult ruleResult
+    ) {
+        LlmReviewResult fastLlmResult;
+        optimizationContext.forceEffectiveModel(fastModel);
+        try {
+            fastLlmResult = traceRecorder.record(
+                    trace,
+                    "llm_review_fast",
+                    () -> llmReviewRunner.run(enrichedInput),
+                    span -> {
+                    }
+            );
+        } finally {
+            optimizationContext.clearForcedEffectiveModel();
+        }
+        TraceSpan fastLlmSpan = trace.getSpans().getLast();
+        int promptCharacters = enrichedInput.getPromptPayload().getUserPrompt().length();
+        fastLlmSpan
+                .put("llmFindings", fastLlmResult.getFindings().size())
+                .put("modelName", llmModel)
+                .put("effectiveModel", fastModel)
+                .put("optimizationGroup", "fast_comment")
+                .put("promptCharacters", promptCharacters)
+                .put("estimatedPromptTokens", estimateTokens(promptCharacters))
+                .put("tokenSource", "estimated");
+        log.info(
+                "Fast LLM review completed: findings={}, summary={}",
+                fastLlmResult.getFindings().size(),
+                fastLlmResult.getSummary()
+        );
+
+        ReviewAggregationResult fastAggregationResult = traceRecorder.record(
+                trace,
+                "result_aggregate_fast",
+                () -> reviewResultAggregator.aggregate(enrichedInput, ruleResult, fastLlmResult),
+                span -> {
+                }
+        );
+        trace.getSpans().getLast()
+                .put("findings", fastAggregationResult.getFindings().size())
+                .put("ruleFindings", fastAggregationResult.getRuleFindingCount())
+                .put("llmFindings", fastAggregationResult.getLlmFindingCount())
+                .put("duplicatesRemoved", fastAggregationResult.getDuplicateCount());
+
+        TraceSpan commentSpan = traceRecorder.start(trace, "github_comment_fast");
+        try {
+            String commentBody = reviewCommentRenderer.renderFastReview(fastAggregationResult);
+            commentSpan
+                    .put("commentLength", commentBody.length())
+                    .put("enabled", commentEnabled);
+            if (!commentEnabled) {
+                commentSpan.put("commentWritten", false);
+                commentSpan.finish(TraceStatus.SKIPPED, java.time.Instant.now());
+                return null;
+            }
+            long commentId = githubPullRequestCommentClient.createComment(enrichedInput.getPrContext(), commentBody);
+            commentSpan.put("commentId", commentId);
+            commentSpan.put("commentWritten", true);
+            commentSpan.finish(TraceStatus.SUCCESS, java.time.Instant.now());
+            log.info("Wrote fast review comment to pull request.");
+            return commentId;
         } catch (RuntimeException exception) {
             commentSpan.put("commentWritten", false);
             commentSpan.fail(exception, java.time.Instant.now());

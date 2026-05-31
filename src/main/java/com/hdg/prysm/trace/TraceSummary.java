@@ -38,13 +38,17 @@ public class TraceSummary {
         this.ruleFindings = readLastInt(context, "result_aggregate", "ruleFindings");
         this.llmFindings = readLastInt(context, "result_aggregate", "llmFindings");
         this.duplicatesRemoved = readLastInt(context, "result_aggregate", "duplicatesRemoved");
-        this.promptCharacters = readLastInt(context, "llm_review", "promptCharacters");
-        this.estimatedPromptTokens = readLastInt(context, "llm_review", "estimatedPromptTokens");
-        this.tokenSource = readLastString(context, "llm_review", "tokenSource");
-        this.commentWritten = readLastBoolean(context, "github_comment", "commentWritten");
-        this.optimizationGroup = readLastString(context, "llm_review", "optimizationGroup");
-        this.modelName = readLastString(context, "llm_review", "modelName");
-        this.effectiveModel = readLastString(context, "llm_review", "effectiveModel");
+        this.promptCharacters = readLastInt(context, "llm_review_deep", "promptCharacters");
+        this.estimatedPromptTokens = readLastInt(context, "llm_review_deep", "estimatedPromptTokens");
+        this.tokenSource = readLastString(context, "llm_review_deep", "tokenSource");
+        Boolean commentWrittenValue = readLastBoolean(context, "github_comment", "commentWritten");
+        if (commentWrittenValue == null) {
+            commentWrittenValue = readLastBoolean(context, "github_comment_update", "commentWritten");
+        }
+        this.commentWritten = commentWrittenValue;
+        this.optimizationGroup = readLastString(context, "llm_review_deep", "optimizationGroup");
+        this.modelName = readLastString(context, "llm_review_deep", "modelName");
+        this.effectiveModel = readLastString(context, "llm_review_deep", "effectiveModel");
     }
 
     public String getTraceId() {

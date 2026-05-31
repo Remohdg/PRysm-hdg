@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -69,7 +70,7 @@ public class GithubPullRequestCommentClient {
         this.apiBaseUrl = trimTrailingSlash(apiBaseUrl);
     }
 
-    public void createComment(PrContext context, String body) {
+    public long createComment(PrContext context, String body) {
         if (context == null) {
             throw new IllegalArgumentException("Pull request context must not be null");
         }
@@ -92,11 +93,46 @@ public class GithubPullRequestCommentClient {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new IllegalStateException("GitHub pull request comment failed with status " + response.statusCode());
             }
+            return readCommentId(response.body());
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to write GitHub pull request comment", exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("GitHub pull request comment was interrupted", exception);
+        }
+    }
+
+    public void updateComment(PrContext context, long commentId, String body) {
+        if (context == null) {
+            throw new IllegalArgumentException("Pull request context must not be null");
+        }
+        if (commentId <= 0) {
+            throw new IllegalArgumentException("Pull request comment id must be positive");
+        }
+        if (body == null || body.isBlank()) {
+            throw new IllegalArgumentException("Pull request comment body must not be blank");
+        }
+
+        String token = requireGithubToken();
+        HttpRequest request = HttpRequest.newBuilder(commentUpdateUri(context, commentId))
+                .timeout(Duration.ofSeconds(30))
+                .header("Accept", "application/vnd.github+json")
+                .header("Authorization", "Bearer " + token)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .header("Content-Type", "application/json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(commentBody(body)))
+                .build();
+
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException("GitHub pull request comment update failed with status " + response.statusCode());
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to update GitHub pull request comment", exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("GitHub pull request comment update was interrupted", exception);
         }
     }
 
@@ -111,6 +147,16 @@ public class GithubPullRequestCommentClient {
                 + "/comments");
     }
 
+    private URI commentUpdateUri(PrContext context, long commentId) {
+        return URI.create(apiBaseUrl
+                + "/repos/"
+                + encodePathSegment(context.getOwner())
+                + "/"
+                + encodePathSegment(context.getRepository())
+                + "/issues/comments/"
+                + commentId);
+    }
+
     private String commentBody(String body) {
         ObjectNode node = objectMapper.createObjectNode();
         node.put("body", body);
@@ -123,6 +169,15 @@ public class GithubPullRequestCommentClient {
             throw new IllegalStateException("GITHUB_TOKEN must be configured to write pull request comments");
         }
         return token;
+    }
+
+    private long readCommentId(String body) {
+        JsonNode root = objectMapper.readTree(body == null || body.isBlank() ? "{}" : body);
+        JsonNode id = root.get("id");
+        if (id == null || !id.canConvertToLong() || id.asLong() <= 0) {
+            throw new IllegalStateException("GitHub pull request comment response is missing id");
+        }
+        return id.asLong();
     }
 
     private static String trimTrailingSlash(String value) {

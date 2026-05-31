@@ -44,3 +44,5 @@ with:
   llm-model: qwen-plus
 ```
 Workflow smoke test for PR review comment writeback.
+
+Optimization defaults smoke test.
